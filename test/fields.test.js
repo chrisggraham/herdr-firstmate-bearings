@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseTaskRecord } from "../mods/firstmate-bearings/toon.js";
 import { cardOf } from "../mods/firstmate-bearings/bearings.js";
-import { linkOf, relativeDate, typedFields } from "../mods/firstmate-bearings/fields.js";
+import { lineBadges, linkOf, relativeDate, typedFields } from "../mods/firstmate-bearings/fields.js";
 
 const NOW = Date.UTC(2030, 5, 15, 23, 59);
 
@@ -109,4 +109,22 @@ test("the Doing text of an in-flight card is a paragraph, even when short", () =
   const { texts, badges } = typedFields([["Doing", "tests green"]], NOW);
   assert.deepEqual(texts, [{ label: "Doing", value: "tests green" }]);
   assert.deepEqual(badges, []);
+});
+
+test("line 2 takes the most useful badges first and leaves id for the opened card", () => {
+  const { badges } = typedFields([["id", "t-1"], ["created", "2030-06-10"], ["kind", "ship"], ["priority", "1"]], NOW);
+  const { line, rest } = lineBadges(badges);
+  assert.deepEqual(line.map((b) => b.prefix), ["kind", "priority"]);
+  assert.deepEqual(rest.map((b) => b.prefix), ["id", "created"]);
+});
+
+test("line 2 drops a badge that does not fit and keeps a smaller one after it", () => {
+  const { badges } = typedFields([["kind", "ship"], ["blocked by", "a-very-long-task-id-here"], ["priority", "1"]], NOW);
+  const { line, rest } = lineBadges(badges);
+  assert.deepEqual(line.map((b) => b.prefix), ["kind", "priority"]);
+  assert.deepEqual(rest.map((b) => b.prefix), ["blocked by"]);
+});
+
+test("line 2 may have no badges", () => {
+  assert.deepEqual(lineBadges([]), { line: [], rest: [] });
 });

@@ -4,13 +4,13 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile, shared, setShared } from "herdr";
 import { awayPath, findCandidates, inboxPath, listHomes, loginShellArgs, needsCheck, scriptPath, showPath } from "./homes.js";
-import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings } from "./bearings.js";
+import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings, repoOf } from "./bearings.js";
 import { dropGoneRecords, keysToFetch, retryFailedRecords } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
 import { discussLabel, noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
-import { typedFields } from "./fields.js";
+import { lineBadges, typedFields } from "./fields.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { withPanel } from "./panels.js";
@@ -519,37 +519,56 @@ export default class FirstmateBearings extends View {
     return v_flex().flex_none().child(header).children(rows);
   }
 
-  // A card has a bar in its section's color, its title (one line cut to the width, wrapped in full when opened), a status pill and a muted line with
-  // the repo and detail. A click on the title row opens or closes it; the opened body does not close it. A PR chip or a URL opens in the browser.
+  // A card has a bar in its section's color and two lines. Line 1 is the title (one line cut to the width, wrapped in full when opened)
+  // and the status pill or PR chip; a click on it opens or closes the card. Line 2 is the repo and the badges that fit on the left
+  // and the action buttons on the right; a click on it only runs an action. The opened part below holds the detail, the other badges,
+  // the long texts and the link chips.
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
     const open = this.expanded.has(id);
     const entry = this.records.get(this.home.key)?.get(row.itemId);
     const card = cardOf(row, entry?.record);
+    const typed = typedFields(card.fields, Date.now());
+    const badges = lineBadges(typed.badges);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
       .when(!open, (el) => el.truncate()).child(card.title);
+    const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
+      .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
+      .when(Boolean(row.pr), (el) => el.child(this.prChip(row, t)));
+    const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
+      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top).child(this.secondLine(section, row, id, repoOf(row, entry?.record), badges.line, t));
+    return view.children(open ? this.openedRows(row, typed, badges.rest, entry, id, t) : []);
+  }
+
+  // The part of an opened card below the two lines: the detail, the other badges, the long texts, the link chips.
+  openedRows(row, typed, restBadges, entry, id, t) {
+    const links = typed.links.map((link, i) => this.linkChip(link, `${id}-${i}`, t));
+    return [
+      ...(row.detail ? [div().text_size(11).text_color(t.muted).child(row.detail)] : []),
+      ...this.fieldRows({ badges: restBadges, texts: typed.texts }, t),
+      ...(entry?.failedAt !== undefined ? [div().text_size(10.5).text_color(t.dim).child("Details unavailable")] : []),
+      ...(links.length > 0 ? [h_flex().flex_wrap().gap(4).items_center().mt(3).pt(6).border_t(1).border_color(t.border).children(links)] : []),
+    ];
+  }
+
+  // Line 2: the repo and the badges that fit on the left, no wrap; all the action buttons then Discuss on the right.
+  secondLine(section, row, id, repo, badges, t) {
     const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(discussLabel(this.home.name))
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
       .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
-    const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
-      .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)));
-    const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
-      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top);
-    const meta = this.metaLine(row, t);
-    const typed = open ? typedFields(card.fields, Date.now()) : null;
-    return view.when(Boolean(meta), (el) => el.child(meta)).children(open ? this.fieldRows(typed, t) : [])
-      .when(open && entry?.failedAt !== undefined, (el) => el.child(div().text_size(10.5).text_color(t.dim).child("Details unavailable")))
-      .when(open, (el) => el.child(this.footerRow(section, row, id, typed.links, discuss, t)));
+    const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
+    const left = h_flex().flex_1().min_w(0).overflow_hidden().gap(4).items_center()
+      .children([repo && this.repoLabel(repo, t), ...badges.map((badge, i) => this.badge(badge, i, t))].filter(Boolean));
+    return h_flex().gap(6).items_center().child(left)
+      .child(h_flex().gap(2).items_center().flex_none().children(buttons).child(discuss));
   }
 
-  // The one-line footer of an opened card below a thin divider: link chips on the left, the action buttons then Discuss on the right.
-  footerRow(section, row, id, links, discuss, t) {
-    const chips = links.map((link, i) => this.linkChip(link, `${id}-${i}`, t));
-    const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
-    const actions = h_flex().gap(2).items_center().flex_none().children(buttons).child(discuss);
-    const linkRow = h_flex().flex_1().min_w(0).flex_wrap().gap(4).items_center().children(chips);
-    return h_flex().gap(6).items_center().mt(3).pt(6).border_t(1).border_color(t.border).child(linkRow).child(actions);
+  // The muted repo name with the git-branch icon.
+  repoLabel(repo, t) {
+    return h_flex().flex_none().max_w(110).gap(4).items_center()
+      .child(svg("mods/workspace-chrome/git-branch.svg").size(11).flex_none().text_color(t.dim))
+      .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(repo));
   }
 
   // A chip for a URL, like the PR chip: a pull request has the git-compare icon, any other link a link icon.
@@ -571,8 +590,8 @@ export default class FirstmateBearings extends View {
       .child(svg(`mods/firstmate-bearings/${sentNow ? "action-done.svg" : icon}`).size(13).flex_none());
   }
 
-  // The fields of an opened card by type: one wrapping row of light badges for short values, then each long text
-  // under a small muted label. Links are in the footer.
+  // The fields of an opened card by type: one wrapping row of the badges not on line 2, then each long text
+  // under a small muted label. Links are below them.
   fieldRows({ badges, texts }, t) {
     const row = badges.length > 0
       ? [h_flex().flex_wrap().gap(4).py(3).children(badges.map((badge, i) => this.badge(badge, i, t)))]
@@ -604,19 +623,6 @@ export default class FirstmateBearings extends View {
       ? div().id(`url-${index}-${i}`).text_color(t.accent).cursor_pointer().hover((el) => el.opacity(0.7))
           .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(s.url); }).child(s.text)
       : div().child(s.text)));
-  }
-
-  // The muted repo label and detail, then the PR chip when the card has one.
-  metaLine(row, t) {
-    const repo = row.pr?.repo || row.repo;
-    const parts = [
-      repo && h_flex().flex_none().max_w(150).gap(4).items_center()
-        .child(svg("mods/workspace-chrome/git-branch.svg").size(11).flex_none().text_color(t.dim))
-        .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(repo)),
-      row.detail && div().flex_1().min_w(0).text_size(11).text_color(t.muted).child(row.detail),
-      row.pr && this.prChip(row, t),
-    ].filter(Boolean);
-    return parts.length > 0 ? h_flex().gap(6).items_center().children(parts) : null;
   }
 
   // A chip like "PR #12" in the accent color: it opens the PR and changes color under the pointer.

@@ -87,6 +87,13 @@ export function cardOf(row, record) {
   return { title, fields };
 }
 
+// The repo a card shows: the PR's, then the snapshot row's, then the task record's.
+// A landed row has no repo in the snapshot, so its record gives it. A repo is never taken from a URL except a PR row's own.
+export function repoOf(row, record) {
+  const recordRepo = isEmptyField(record?.repo) ? "" : record.repo;
+  return row.pr?.repo || row.repo || recordRepo;
+}
+
 // A "backend ..." note means the snapshot could not see the task's terminal. That check
 // can fail when the snapshot runs through the app (it needs the terminal socket), so it is not shown.
 const shownDoing = (doing) => (/^backend /.test(doing ?? "") ? "" : doing);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { cardOf, isAwayRefusal, readBearings, taskRecordKeys, REVEAL_FLAGS } from "../mods/firstmate-bearings/bearings.js";
+import { cardOf, repoOf, isAwayRefusal, readBearings, taskRecordKeys, REVEAL_FLAGS } from "../mods/firstmate-bearings/bearings.js";
 
 const fixture = readFileSync(new URL("./fixtures/bearings.json", import.meta.url), "utf8");
 const countsOf = (bearings) => Object.fromEntries(bearings.sections.map((s) => [s.id, s.count]));
@@ -189,4 +189,25 @@ test("a card leaves out the fields it already shows in its own way", () => {
 test("a card keeps a state it does not show as a pill, and leaves out the state unknown", () => {
   assert.deepEqual(cardOf({ title: "T", facts: [["State", "paused"]] }, undefined).fields, [["State", "paused"]]);
   assert.deepEqual(cardOf({ title: "T", facts: [["State", "unknown"]] }, undefined).fields, []);
+});
+
+test("a landed card shows the repo from its task record, never from a URL", () => {
+  const row = { title: "T", facts: [], url: "https://github.com/o/from-url/pull/1" };
+  assert.equal(repoOf(row, { repo: "example-repo" }), "example-repo");
+  assert.equal(repoOf(row, { repo: "-" }), "");
+  assert.equal(repoOf(row, undefined), "");
+});
+
+test("the PR's repo and the snapshot repo come before the record repo", () => {
+  assert.equal(repoOf({ pr: { repo: "o/pr" }, repo: "o/snap" }, { repo: "rec" }), "o/pr");
+  assert.equal(repoOf({ repo: "o/snap" }, { repo: "rec" }), "o/snap");
+});
+
+test("every task section's card gets the repo from its task record", () => {
+  const text = JSON.stringify({ schema: "fm-bearings.v1",
+    decisions_open: [{ id: "d", summary: "A long enough title here: why", question: "q" }],
+    in_flight: [{ id: "f", name: "F" }], gates: [{ id: "g", title: "G" }], landed: [{ id: "l", what: "L" }] });
+  const sections = readBearings(text, { hideEmpty: false }).sections.filter((s) => s.count > 0);
+  assert.deepEqual(sections.map((s) => s.id), ["decisions", "in-flight", "queued", "landed"]);
+  for (const section of sections) assert.equal(repoOf(section.rows[0], { repo: "example-repo" }), "example-repo", section.id);
 });
