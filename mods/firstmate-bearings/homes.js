@@ -27,18 +27,27 @@ const pathIn = (home, file) => `${home.folder.replace(/\/+$/, "")}/${file}`;
 
 export const scriptPath = (home) => pathIn(home, SCRIPT);
 
+// This file exists in a Firstmate home while it is in away mode.
+export const awayPath = (home) => pathIn(home, "state/.afk");
+
 export const inboxPath = (home) => pathIn(home, "bin/fm-inbox.sh");
 
 // The space's name when someone named it, else the folder's name.
 export function homeName(candidate) {
   const folderName = candidate.folder.replace(/\/+$/, "").split("/").pop();
-  const name = candidate.named ? candidate.spaceName : folderName;
-  return candidate.machine ? `${name} · ${candidate.machine}` : name;
+  return candidate.named ? candidate.spaceName : folderName;
+}
+
+// `checks` maps a candidate key to { found, at }. A folder that is not a home is checked again
+// once `every` milliseconds have passed, because it may become a home later. A home is not checked again.
+export function needsCheck(checks, key, now, every) {
+  const check = checks.get(key);
+  return !check || (!check.found && now - check.at >= every);
 }
 
 // Keeps the candidates the check found to be homes, with their display name.
-export function listHomes(candidates, isHome) {
+export function listHomes(candidates, checks) {
   return candidates
-    .filter((candidate) => isHome.get(candidate.key) === true)
+    .filter((candidate) => checks.get(candidate.key)?.found === true)
     .map((candidate) => ({ key: candidate.key, machine: candidate.machine, folder: candidate.folder, name: homeName(candidate) }));
 }
