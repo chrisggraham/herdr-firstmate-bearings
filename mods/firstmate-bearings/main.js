@@ -9,6 +9,7 @@ import { dropGoneRecords, keysToFetch } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
 import { noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
+import { splitUrls } from "./urls.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
@@ -476,7 +477,7 @@ export default class FirstmateBearings extends View {
   }
 
   // A card has a bar in its section's color, its title (one line cut to the width, wrapped in full when opened), a status pill and a muted line with
-  // the repo and detail. A left click opens it to every field; a PR chip opens the PR.
+  // the repo and detail. A click on the title row opens or closes it; the opened body does not close it. A PR chip or a URL opens in the browser.
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
     const open = this.expanded.has(id);
@@ -488,16 +489,20 @@ export default class FirstmateBearings extends View {
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
       .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
-    const buttons = open ? actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t)) : [];
-    const top = h_flex().gap(8).items_start().child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
-      .when(open, (el) => el.child(discuss));
-    const actions = buttons.length > 0 ? h_flex().gap(2).items_center().children(buttons) : null;
-    const view = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
-      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => this.toggleCard(id, cx)).child(top);
+    const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
+      .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)));
+    const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
+      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top);
     const meta = this.metaLine(row, t);
     const grid = open ? this.fieldGrid(card.fields, t) : [];
-    return view.when(Boolean(meta), (el) => el.child(meta)).when(Boolean(actions), (el) => el.child(actions)).children(grid);
+    return view.when(Boolean(meta), (el) => el.child(meta)).children(grid)
+      .when(open, (el) => el.child(this.actionRow(section, row, id, discuss, t)));
+  }
+
+  // The icon row at the bottom of an opened card, right-aligned below a thin divider: the action buttons, then Discuss.
+  actionRow(section, row, id, discuss, t) {
+    const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
+    return h_flex().gap(2).items_center().justify_end().mt(3).pt(6).border_t(1).border_color(t.border).children(buttons).child(discuss);
   }
 
   // A small icon button like Discuss: muted icon, accent on hover, the plain action name as tooltip.
@@ -514,7 +519,18 @@ export default class FirstmateBearings extends View {
     return fields.map(([key, value], i) => h_flex().gap(8).items_start().py(3)
       .when(i > 0, (el) => el.border_t(1).border_color(t.border))
       .child(div().w(FIELD_KEY_WIDTH).flex_none().text_size(10).font_semibold().text_color(t.dim).child(key.toUpperCase()))
-      .child(div().flex_1().min_w(0).text_size(12).text_color(t.foreground).child(value)));
+      .child(this.fieldValue(value, i, t)));
+  }
+
+  // A field value: any http(s) URL in it is a link that opens in the browser; the rest is plain text.
+  fieldValue(value, index, t) {
+    const segments = splitUrls(value);
+    const box = v_flex().flex_1().min_w(0).text_size(12).text_color(t.foreground);
+    if (!segments.some((s) => s.url)) return box.child(String(value));
+    return box.children(segments.map((s, i) => s.url
+      ? div().id(`url-${index}-${i}`).text_color(t.accent).cursor_pointer().hover((el) => el.opacity(0.7))
+          .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(s.url); }).child(s.text)
+      : div().child(s.text)));
   }
 
   // The muted repo label and detail, then the PR chip when the card has one.
