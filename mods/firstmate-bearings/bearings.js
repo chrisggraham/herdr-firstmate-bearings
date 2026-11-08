@@ -99,7 +99,7 @@ function prRow(pr, snapshot) {
 }
 
 // The chip text and repo from a ".../<repo>/pull/<number>" URL; a URL of another shape gets a plain "PR".
-function prChip(url) {
+export function prChip(url) {
   const [, repo = "", number] = /^https?:\/\/[^/]+\/(.+)\/pull\/(\d+)/.exec(String(url ?? "")) ?? [];
   return { label: number ? `PR #${number}` : "PR", repo };
 }
