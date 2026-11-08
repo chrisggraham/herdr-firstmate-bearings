@@ -1,39 +1,56 @@
 # Firstmate Bearings
 
-Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the bearings of a [Firstmate](https://github.com/kunchenguid/firstmate) that is open in any tab. It only reads. It never switches tabs and never changes Firstmate.
+Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the bearings of a [Firstmate](https://github.com/kunchenguid/firstmate) that is open in any tab.
+
+The panel sends notes to a Firstmate (Discuss) and runs actions (Done, Defer, Drop, Stop, Start now) through that Firstmate's inbox, with `bin/fm-inbox.sh note`.
 
 ## Features
 
-- Lists the Firstmates open anywhere in Herdr, on this computer and on connected machines.
-- Shows one Firstmate's bearings in six sections: Waiting on you, In flight, PRs, Secondmates, Queued and Landed. Each section is collapsible and shows a count. Sections with nothing in them are hidden.
-- Each item is a card with a color bar for its section, its full title, a status pill (for example working, held, merged) and a muted repo and detail line. A left click opens the card in place to show every field of the task (from `fm-tasks-axi.sh show <id> --full`, fetched once per task) and then the snapshot fields it lacks. Click again to close it.
-- Section and card open or closed state survives a switch of space.
-- Refreshes every 30 seconds, or at once with the refresh button in the header. If a refresh fails, the last data stays, marked with its age, with one error line.
-- A PR card has a chip like "PR #12" with its repo; it opens the PR in your browser.
-- Every section shows all its items: the snapshot is fetched with `--all-decisions` and `--all-landed`.
-- No dependencies and no build step.
+- Home page that lists the Firstmates open in Herdr, on this computer and on connected machines, with an away indicator.
+- Sections with counts: Waiting on you, In flight, PRs, Secondmates, Queued and Landed. Each one collapses. Empty sections are hidden.
+- Two-line cards: the title with a status pill or PR chip, then the repo with the actions.
+- Opened card: all badges, the description, long texts and link chips.
+- Discuss: a dialog that sends a note about a card to the Firstmate.
+- Actions on a card, only when valid: Done, Defer and Drop (Waiting on you), Stop (In flight), Start now (Queued). Drop and Stop ask first.
+- Refresh button, and Collapse all or Expand all.
+- Card details come from the full task record.
+- Errors go to a log file.
+- Demo mode: a built-in sample Firstmate with invented data, for screenshots.
+- Settings in `config.json`.
 
 ## Install
 
 The mod runs `bin/fm-bearings-snapshot.sh` from a Firstmate home on your machines. Install it only if you want that.
 
+Paste this to your Herdr agent:
+
+```
+Install the Herdr mod from https://github.com/chrisggraham/herdr-firstmate-bearings
+```
+
+Or install it by hand:
+
 1. Copy or link `mods/firstmate-bearings` into `~/.config/herdr-app/mods/`.
-2. Add the **Firstmate** button and the panel block to your tab bar and layout. Give your Herdr agent the URL of this repo, or follow `RECIPE.md`.
+2. Add the **Firstmate** button and the panel block to your tab bar and layout. `RECIPE.md` has the exact edits.
 3. Check the mod: `herdr-app check ~/.config/herdr-app/mods/firstmate-bearings`
 
 ## Use
 
 1. Click **Firstmate** in the tab bar. The panel lists the Firstmates found in open tabs.
-2. Pick one. With exactly one found, the panel shows it at once.
-3. With more than one Firstmate, click the name box at the top (it has a chevron) to go back to the list. With one Firstmate, the panel opens it directly and shows no box.
+2. Pick one. The panel shows its bearings and refreshes every 30 seconds.
+3. Click the back arrow at the top left to return to the list.
 
-The speech-bubble icon button (tooltip "Discuss with Firstmate") in an expanded card opens a short note to that Firstmate about the item. A dialog takes a short note. **Send** adds the note to that Firstmate's inbox with `bin/fm-inbox.sh note`, with only the section and the item id (never the row's text). The note box is multi-line: Enter adds a line, Cmd or Ctrl+Enter sends, and Esc cancels. On success the dialog closes and the card's Discuss icon shows a check for a few seconds; a failure keeps the dialog open with the error. Nothing is typed into the Firstmate pane.
+A Firstmate is found when one of its panes is open in its home folder. The pick is kept across restarts.
 
-The pick is shared by every tab and is kept across restarts. A Firstmate is found when one of its panes is open in its home folder. A Firstmate with only a worker tab open is not found.
+A card opens when you click its title. Card details are fetched once per task with `fm-tasks-axi.sh show <id> --full`. If a refresh fails, the last data stays with its age and one error line. While a Firstmate is in away mode, the panel says so and keeps the last data.
+
+**Discuss** (the message icon) opens a multi-line note box. Cmd or Ctrl+Enter sends, Enter adds a line and Esc cancels. The note holds the section and the item id, never the card text. On success the dialog closes and the icon shows a check. A failure keeps the dialog open with the error.
+
+An action button sends one note, `[bearings panel] <action> <section> <item id>`.
 
 ## Settings
 
-`mods/firstmate-bearings/config.json` holds the settings. It is read on every refresh.
+`mods/firstmate-bearings/config.json` is read on every refresh.
 
 ```json
 { "hideEmptySections": true, "demo": false }
@@ -55,7 +72,7 @@ In demo mode the panel runs no command and writes no log line. The Discuss and a
 
 ## Errors
 
-Every error the mod catches is logged with its time, where it happened and a short message, in `firstmate-bearings.log` in the Herdr app folder (`~/.config/herdr-app/`, or `$HERDR_APP_HOME`). The log keeps the newest 200 lines. Each line also goes to the app's console output.
+Errors are logged with their time, place and a short message in `firstmate-bearings.log` in the Herdr app folder (`~/.config/herdr-app/`, or `$HERDR_APP_HOME`). The log keeps the newest 200 lines.
 
 ## Update
 
@@ -63,8 +80,6 @@ Pull this repo again. Herdr reloads the mod.
 
 ## Development
 
-- `npm test` runs `node --test`. There are no dependencies.
+- `npm test` runs `node --test`.
 - `herdr-app check mods/firstmate-bearings` checks the mod.
-- `docs/design.md` describes the data contract, discovery and display.
-
-An expanded card also shows small action buttons, only when its data proves the action is valid: **Done** (a hand task), **Defer** (a hold that is not deferred) and **Drop** in Waiting on you, **Stop** for a working task, and **Start now** for a queued item that is not blocked or held. Drop and Stop ask first. Each button sends one note, `[bearings panel] <action> <section> <item id>`, through the same inbox command; the panel runs nothing else. PR and Landed cards have Discuss only.
+- `docs/design.md` describes the data contract, discovery and display. `docs/fields.md` lists the fields.
