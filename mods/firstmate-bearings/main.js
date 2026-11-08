@@ -1,5 +1,5 @@
 // A sidebar panel that shows the bearings of one open Firstmate. It never switches tabs.
-// Right-click a row opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
+// openAskDialog opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, exec, theme, props, openOverlay, closeOverlay, notify } from "herdr";
@@ -125,7 +125,9 @@ export default class FirstmateBearings extends View {
     this.handle = cx.focus_handle();
   }
 
-  openAsk(home, sectionId, itemId) {
+  // The way in for the panel: call this from the "Ask Firstmate" button of an expanded card.
+  openAskDialog(sectionId, itemId) {
+    const home = this.home;
     const ask = { machine: home.machine, folder: home.folder, homeName: home.name, sectionId, itemId };
     openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
   }
@@ -252,7 +254,6 @@ export default class FirstmateBearings extends View {
   rowView(sectionId, row, index, t) {
     const line = h_flex().id(`row-${sectionId}-${index}`).h(24).flex_none().pl(33).pr(14).items_center()
       .text_size(12).text_color(row.flagged ? t.blocked : t.muted)
-      .on_mouse_down("right", () => this.openAsk(this.home, sectionId, row.itemId))
       .child(div().flex_1().min_w(0).truncate().child(row.text));
     if (!row.url) return line;
     return line.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => cx.open_url(row.url));
