@@ -14,18 +14,18 @@ export const REVEAL_FLAGS = ["--all-decisions", "--all-landed"];
 // `tone` names the theme color of a section's accent bar; a status tone names the color of its pill.
 const SECTIONS = [
   { id: "decisions", title: "Waiting on you", tone: "blocked", highlight: true, items: (b) => list(b.decisions_open), row: decisionRow },
-  { id: "in-flight", title: "In flight", tone: "accent", items: (b) => list(b.in_flight), row: (t) => ({
+  { id: "in-flight", title: "In flight", tone: "ansi4", items: (b) => list(b.in_flight), row: (t) => ({
     title: t.name ?? t.id ?? "", detail: shownDoing(t.doing) ?? "", repo: t.repo, status: statusOf(t.state),
     facts: facts({ Repo: t.repo, State: t.state, Doing: shownDoing(t.doing), Kind: t.kind, Id: t.id }) }) },
   { id: "prs", title: "PRs", tone: "ansi4", items: (b) => list(b.recorded_prs), row: prRow },
   { id: "secondmates", title: "Secondmates", tone: "dim", hasTask: false, items: (b) => list(b.secondmates), row: secondmateRow },
   { id: "queued", title: "Queued", tone: "muted", items: (b) => list(b.gates), row: (g) => ({
     title: g.title ?? "", detail: joinParts(plainOwner(g.owner), g.reason), status: hasValue(g.blocked_by) ? statusOf("held") : undefined, facts: facts({ "Blocked by": g.blocked_by, Reason: g.reason, Owner: plainOwner(g.owner), Filed: g.filed }) }) },
-  { id: "landed", title: "Landed", tone: "done", items: (b) => list(b.landed), row: (l) => ({
+  { id: "landed", title: "Landed", tone: "ansi2", items: (b) => list(b.landed), row: (l) => ({
     title: l.what ?? "", detail: plainOwner(l.owner), status: statusOf("merged"), facts: facts({ Owner: plainOwner(l.owner), Artifact: l.artifact }) }) },
 ];
 
-const STATUS_TONES = { working: "working", blocked: "blocked", paused: "idle", held: "idle", merged: "done", done: "done" };
+const STATUS_TONES = { working: "working", blocked: "blocked", paused: "idle", held: "idle", merged: "ansi2", done: "ansi2" };
 const statusOf = (text) => (hasValue(text) && text !== "unknown" ? { text, tone: STATUS_TONES[text] ?? "muted" } : undefined);
 const hasValue = (value) => Boolean(value) && value !== "-";
 

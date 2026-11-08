@@ -62,14 +62,14 @@ test("a row has a title, a detail line, a repo label and a status pill", () => {
 
 test("each section has a tone for its accent bar", () => {
   const tones = readBearings(fixture).sections.map((s) => s.tone);
-  assert.deepEqual(tones, ["blocked", "accent", "ansi4", "dim", "muted", "done"]);
+  assert.deepEqual(tones, ["blocked", "ansi4", "ansi4", "dim", "muted", "ansi2"]);
 });
 
 test("landed cards show a merged pill and a blocked gate shows held", () => {
   const text = JSON.stringify({ schema: "fm-bearings.v1", landed: [{ id: "l", what: "Done" }],
     gates: [{ id: "g", title: "Gate", blocked_by: "t-1" }, { id: "h", title: "Free", blocked_by: "-" }] });
   const sections = Object.fromEntries(readBearings(text).sections.map((s) => [s.id, s]));
-  assert.deepEqual(sections.landed.rows[0].status, { text: "merged", tone: "done" });
+  assert.deepEqual(sections.landed.rows[0].status, { text: "merged", tone: "ansi2" });
   assert.deepEqual(sections.queued.rows.map((r) => r.status), [{ text: "held", tone: "idle" }, undefined]);
 });
 

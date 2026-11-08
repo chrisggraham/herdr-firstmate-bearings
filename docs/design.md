@@ -31,7 +31,7 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 
 Switcher, "updated 12s ago", then collapsible sections with counts (collapsed and opened state kept in `localStorage`, so a switch of space keeps it). A section with no items is hidden unless `hideEmptySections` is `false` in `config.json`.
 
-Each item is a card: a bar in the section color (Waiting on you blocked, In flight accent, PRs blue, Secondmates dim, Queued muted, Landed done), a title (two lines at most), a status pill, a muted repo label and detail line. Colors are theme tokens only. A left click opens the card in place to the full title and every fact the snapshot has for it; a second click closes it. Right-click is left free.
+Each item is a card: a bar in the section color (Waiting on you blocked, In flight and PRs blue, Secondmates dim, Queued muted, Landed green), a title (two lines at most), a status pill, a muted repo label and detail line. Colors are theme tokens only. A left click opens the card in place to the full title and every fact the snapshot has for it; a second click closes it. Right-click is left free.
 
 1. **Waiting on you**: `decisions_open[]` summary; opened, the question, key and owner. Highlighted above zero.
 2. **In flight**: `in_flight[]` name; repo label, state pill, detail is doing.
