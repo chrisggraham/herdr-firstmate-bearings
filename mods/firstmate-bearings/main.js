@@ -215,7 +215,7 @@ export default class FirstmateBearings extends View {
   // A card shows its title (up to two lines) and a muted detail line. A left click opens it
   // to the full title and every fact; the PR link on an opened card opens the PR.
   rowView(sectionId, row, index, t) {
-    const id = `${sectionId}-${index}`;
+    const id = `${sectionId}-${index}-${row.title}`;
     const open = this.expanded.has(id);
     const card = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(7).gap(2).rounded(8)
       .bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover))
