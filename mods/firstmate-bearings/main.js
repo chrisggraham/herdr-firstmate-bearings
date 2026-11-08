@@ -132,10 +132,16 @@ export default class FirstmateBearings extends View {
   }
 
   bearingsView(home, homes, t) {
-    const switcher = h_flex().id("firstmate-switcher").h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-      .when(homes.length > 1, (el) => el.cursor_pointer().on_click((_e, cx) => { this.listOpen = true; cx.notify(); }))
-      .child(div().flex_1().min_w(0).truncate().font_semibold().child(home.name))
-      .child(div().text_size(11).text_color(t.dim).child(this.updated ? `updated ${ago(this.updated)}` : "loading…"));
+    const name = div().flex_1().min_w(0).truncate().font_semibold().child(home.name);
+    // With several Firstmates the name is a select box: a chevron shows that it opens the list.
+    const title = homes.length > 1
+      ? h_flex().id("firstmate-switcher").flex_1().min_w(0).h(28).px(8).gap(6).items_center().rounded(6).border_1().border_color(t.border)
+        .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { this.listOpen = true; cx.notify(); })
+        .child(name).child(svg("mods/workspace-chrome/chevron-down.svg").size(12).flex_none().text_color(t.dim))
+      : name;
+    const switcher = h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
+      .child(title)
+      .child(div().flex_none().text_size(11).text_color(t.dim).child(this.updated ? `updated ${ago(this.updated)}` : "loading…"));
     return v_flex().flex_1().min_h(0).child(switcher)
       .child(v_flex().id("firstmate-sections").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
         .children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
