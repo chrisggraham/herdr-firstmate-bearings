@@ -578,7 +578,7 @@ export default class FirstmateBearings extends View {
     const repo = row.pr?.repo || row.repo;
     const parts = [
       repo && h_flex().flex_none().max_w(150).gap(4).items_center()
-        .child(svg("mods/firstmate-bearings/repo.svg").size(11).flex_none().text_color(t.dim))
+        .child(svg("mods/workspace-chrome/git-branch.svg").size(11).flex_none().text_color(t.dim))
         .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(repo)),
       row.detail && div().flex_1().min_w(0).text_size(11).text_color(t.muted).child(row.detail),
       row.pr && this.prChip(row, t),
