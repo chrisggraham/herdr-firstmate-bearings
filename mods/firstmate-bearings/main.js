@@ -421,7 +421,7 @@ export default class FirstmateBearings extends View {
   // Every field of an opened card as a two-column grid: a small uppercase muted key and a value that wraps.
   fieldGrid(fields, t) {
     return fields.map(([key, value], i) => h_flex().gap(8).items_start().py(3)
-      .border_t(i === 0 ? 0 : 1).border_color(t.border)
+      .when(i > 0, (el) => el.border_t(1).border_color(t.border))
       .child(div().w(FIELD_KEY_WIDTH).flex_none().text_size(10).font_semibold().text_color(t.dim).child(key.toUpperCase()))
       .child(div().flex_1().min_w(0).text_size(12).text_color(t.foreground).child(value)));
   }
