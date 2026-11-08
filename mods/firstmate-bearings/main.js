@@ -11,7 +11,7 @@ import { noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
-import { loadSet, saveSet, toggleId } from "./state.js";
+import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
@@ -205,6 +205,17 @@ export default class FirstmateBearings extends View {
     cx.notify();
   }
 
+  collapseAll(cx) {
+    toggleAll(this.sectionIds(), this.collapsed, this.expanded);
+    saveSet(localStorage, COLLAPSED_STORE, this.collapsed);
+    saveSet(localStorage, EXPANDED_STORE, this.expanded);
+    cx.notify();
+  }
+
+  sectionIds() {
+    return (this.data?.sections ?? []).map((section) => section.id);
+  }
+
   toggleCard(id, cx) {
     toggleId(this.expanded, id);
     saveSet(localStorage, EXPANDED_STORE, this.expanded);
@@ -390,7 +401,7 @@ export default class FirstmateBearings extends View {
     const header = h_flex().h(42).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
       .child(back).child(name).child(machine)
       .child(this.pill(updated, t.muted, t.hover))
-      .child(this.refreshButton(t));
+      .child(this.collapseButton(t)).child(this.refreshButton(t));
     return v_flex().flex_1().min_h(0).child(header)
       .child(v_flex().id("firstmate-sections").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
         .children(this.awayLines(home, t)).children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
@@ -422,6 +433,16 @@ export default class FirstmateBearings extends View {
     return h_flex().id("firstmate-refresh").size(26).flex_none().items_center().justify_center().rounded(6)
       .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.refresh(cx))
       .child(icon.size(14).flex_none().text_color(busy ? t.working : t.foreground));
+  }
+
+  // Closes every section and card; when all are closed, opens every section.
+  collapseButton(t) {
+    const ids = this.sectionIds();
+    const expand = ids.length > 0 && allClosed(ids, this.collapsed);
+    const label = expand ? "Expand all" : "Collapse all";
+    return h_flex().id("firstmate-collapse-all").size(26).flex_none().items_center().justify_center().rounded(6)
+      .cursor_pointer().hover((s) => s.bg(t.hover)).tooltip(label).on_click((_e, cx) => this.collapseAll(cx))
+      .child(svg(`mods/firstmate-bearings/${expand ? "expand-all" : "collapse-all"}.svg`).size(14).flex_none().text_color(t.foreground));
   }
 
   errorLines(t) {

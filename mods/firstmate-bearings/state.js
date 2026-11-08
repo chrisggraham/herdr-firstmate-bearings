@@ -22,3 +22,17 @@ export function saveSet(storage, key, ids) {
 export function toggleId(ids, id) {
   if (!ids.delete(id)) ids.add(id);
 }
+
+// True when every section is closed.
+export const allClosed = (sectionIds, collapsed) => sectionIds.every((id) => collapsed.has(id));
+
+// Closes every section and every opened card; when all sections are already closed, opens them all.
+// Opened cards stay closed after an expand.
+export function toggleAll(sectionIds, collapsed, expanded) {
+  if (allClosed(sectionIds, collapsed)) {
+    collapsed.clear();
+    return;
+  }
+  sectionIds.forEach((id) => collapsed.add(id));
+  expanded.clear();
+}

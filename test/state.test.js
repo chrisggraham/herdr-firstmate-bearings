@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadSet, saveSet, toggleId } from "../mods/firstmate-bearings/state.js";
+import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "../mods/firstmate-bearings/state.js";
 
 const fakeStorage = (values = {}) => ({
   values,
@@ -31,4 +31,19 @@ test("toggling adds an absent id and removes a present one", () => {
   assert.deepEqual([...ids], ["a"]);
   toggleId(ids, "a");
   assert.equal(ids.size, 0);
+});
+
+test("collapse all closes every section and every opened card", () => {
+  const collapsed = new Set(["a"]);
+  const expanded = new Set(["card-1"]);
+  toggleAll(["a", "b", "c"], collapsed, expanded);
+  assert.deepEqual([...collapsed].sort(), ["a", "b", "c"]);
+  assert.equal(expanded.size, 0);
+});
+
+test("with every section closed, the same call opens all sections", () => {
+  const collapsed = new Set(["a", "b"]);
+  toggleAll(["a", "b"], collapsed, new Set());
+  assert.equal(collapsed.size, 0);
+  assert.equal(allClosed(["a", "b"], collapsed), false);
 });
