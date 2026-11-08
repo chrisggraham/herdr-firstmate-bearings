@@ -1,13 +1,13 @@
 // A sidebar panel that shows the bearings of one open Firstmate. It never switches tabs.
 // openAskDialog opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
 import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile, shared, setShared } from "herdr";
 import { awayPath, findCandidates, inboxPath, listHomes, loginShellArgs, needsCheck, scriptPath, showPath } from "./homes.js";
 import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings, repoOf } from "./bearings.js";
 import { dropGoneRecords, keysToFetch, retryFailedRecords } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
-import { discussLabel, noteArgs, newRequestId, toFirstmate } from "./ask.js";
+import { discussLabel, noteArgs, newRequestId, toFirstmate, isSendKey, SENT_SHARED_KEY } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
 import { typedFields } from "./fields.js";
@@ -19,7 +19,6 @@ import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
-const SENT_SHOWN_MS = 1500;
 const SENT_FLASH_MS = 3000;
 const REPO_URL = "https://github.com/chrisggraham/herdr-firstmate-bearings";
 const PANEL_ID = "firstmate-bearings";
@@ -273,17 +272,15 @@ export default class FirstmateBearings extends View {
     cx.notify();
   }
 
-  // The dialog: one text input, Cancel and Send. It runs no timers and no discovery.
+  // The dialog: one multi-line text box, Cancel and Send. It runs no timers and no discovery.
   initAsk(cx) {
     this.ask = props().ask;
     this.requestId = newRequestId();
     this.text = "";
     this.sending = false;
-    this.sent = false;
     this.failure = null;
-    this.input = InputState.new({ value: "" });
+    this.input = TextareaState.new({ value: "", rows: 4 });
     this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
-    this.input.on("submit", (_e, cx) => this.send(cx));
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
     this.handle = cx.focus_handle();
@@ -293,16 +290,15 @@ export default class FirstmateBearings extends View {
   openAskDialog(sectionId, itemId) {
     const home = this.home;
     const ask = { machine: home.machine, folder: home.folder, homeName: home.name, demo: home.demo, sectionId, itemId };
-    openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
+    openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 420, props: { ask } });
   }
 
-  // Sends one note to a Firstmate and shows a toast. Returns null when the note was sent, else the error text.
-  async deliver({ machine, folder, homeName, demo }, args, sent) {
+  // Sends one note to a Firstmate. Returns null when the note was sent, else the error text; a failure also shows a toast.
+  async deliver({ machine, folder, homeName, demo }, args) {
     if (demo) return null;
     try {
       const result = await exec(inboxPath({ machine, folder }), args, { on: machine });
       if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
-      notify({ title: toFirstmate(sent, homeName), level: "success" });
       return null;
     } catch (e) {
       const error = firstLine(e.message ?? e);
@@ -315,19 +311,22 @@ export default class FirstmateBearings extends View {
     if (this.sending) return;
     this.sending = true;
     const { sectionId, itemId } = this.ask;
-    cx.spawn(async (cx) => this.finishSend(cx, await this.deliver(this.ask, noteArgs(this.requestId, sectionId, itemId, this.text), "Sent to")));
+    cx.spawn(async (cx) => this.finishSend(cx, await this.deliver(this.ask, noteArgs(this.requestId, sectionId, itemId, this.text))));
   }
 
-  // After a send: on success the dialog shows "Sent" for a moment and closes; on failure it stays open with the error text.
+  // After a send: on success the dialog closes (a Discuss send also marks its card icon); on failure it stays open with the error text.
   finishSend(cx, error) {
     this.sending = false;
     this.failure = error;
     if (!error) {
-      this.sent = true;
-      cx.timer.after(SENT_SHOWN_MS, () => closeOverlay(props().overlay));
+      if (this.ask) setShared(SENT_SHARED_KEY, { key: this.sentKey(this.ask), at: Date.now() });
+      closeOverlay(props().overlay);
+      return;
     }
     cx.notify();
   }
+
+  sentKey({ sectionId, itemId }) { return `ask ${sectionId} ${itemId}`; }
 
   // A button of a card: Drop and Stop ask first, the others send at once.
   runAction(action, section, row, cx) {
@@ -342,9 +341,15 @@ export default class FirstmateBearings extends View {
     const key = `${action} ${section.id} ${row.itemId}`;
     if (this.pending.has(key)) return;
     this.pending.add(key);
-    this.deliver(target, actionArgs(newRequestId(), action, section.id, row.itemId), `${ACTIONS[action].label} sent to`)
+    this.deliver(target, actionArgs(newRequestId(), action, section.id, row.itemId))
       .then((error) => { if (!error) this.flashSent(key, cx); })
       .finally(() => this.pending.delete(key));
+  }
+
+  // The Discuss dialog is another copy of this mod, so it reports a send through shared state.
+  discussSent(sectionId, itemId) {
+    const sent = shared(SENT_SHARED_KEY);
+    return sent?.key === this.sentKey({ sectionId, itemId }) && Date.now() - sent.at < SENT_FLASH_MS;
   }
 
   // The button shows a check for a few seconds after its action was sent.
@@ -359,7 +364,6 @@ export default class FirstmateBearings extends View {
     this.confirm = props().confirm;
     this.requestId = newRequestId();
     this.sending = false;
-    this.sent = false;
     this.failure = null;
   }
 
@@ -367,14 +371,7 @@ export default class FirstmateBearings extends View {
     if (this.sending) return;
     this.sending = true;
     const { action, sectionId, itemId } = this.confirm;
-    cx.spawn(async (cx) => this.finishSend(cx, await this.deliver(this.confirm, actionArgs(this.requestId, action, sectionId, itemId), `${ACTIONS[action].label} sent to`)));
-  }
-
-  // The body of a dialog after a send: a check and the confirmation text.
-  sentView(t, text) {
-    return v_flex().w_full().p(18).gap(8).items_center().bg(t.popover).text_color(t.foreground)
-      .child(svg("mods/firstmate-bearings/action-done.svg").size(22).flex_none().text_color(t.accent))
-      .child(div().text_size(14).font_semibold().child(text));
+    cx.spawn(async (cx) => this.finishSend(cx, await this.deliver(this.confirm, actionArgs(this.requestId, action, sectionId, itemId))));
   }
 
   failureLine(t) {
@@ -385,7 +382,6 @@ export default class FirstmateBearings extends View {
     const t = theme();
     const { action, title } = this.confirm;
     const label = ACTIONS[action].label;
-    if (this.sent) return this.sentView(t, `${label} sent to ${this.confirm.homeName}`);
     return v_flex().id("firstmate-confirm").w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(div().text_size(14).font_semibold().child(`${label} ${title}?`))
       .children([this.failureLine(t)].filter(Boolean))
@@ -396,6 +392,7 @@ export default class FirstmateBearings extends View {
 
   askKey(e, cx) {
     if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
+    else if (isSendKey(e)) { this.send(cx); cx.stop_propagation(); }
   }
 
   // A dialog button: the primary one is filled, the other has an outline.
@@ -408,15 +405,15 @@ export default class FirstmateBearings extends View {
 
   askView() {
     const t = theme();
-    if (this.sent) return this.sentView(t, toFirstmate("Sent to", this.ask.homeName));
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(discussLabel(this.ask.homeName)))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
-      .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(Textarea.new(this.input).h(96).px(10).py(8).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
       .children([this.failureLine(t)].filter(Boolean))
-      .child(h_flex().pt(20).gap(8).justify_end()
+      .child(h_flex().pt(20).gap(8).items_center()
+        .child(div().flex_1().text_size(11).text_color(t.dim).child("Enter adds a line. Cmd or Ctrl+Enter sends."))
         .child(this.dialogButton(t, "ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
         .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : discussLabel(this.ask.homeName), true, (_e, cx) => this.send(cx))));
   }
@@ -588,7 +585,7 @@ export default class FirstmateBearings extends View {
     const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(discussLabel(this.home.name))
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
-      .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
+      .child(svg(`mods/firstmate-bearings/${this.discussSent(section.id, row.itemId) ? "action-done.svg" : "ask.svg"}`).size(13).flex_none());
     const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
     const left = h_flex().flex_1().min_w(0).overflow_hidden().gap(4).items_center()
       .children([repo && this.repoLabel(repo, t), prLink && this.linkChip(prLink, `${id}-pr`, t)].filter(Boolean));
