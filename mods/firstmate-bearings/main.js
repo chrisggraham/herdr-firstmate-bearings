@@ -2,7 +2,7 @@
 // openAskDialog opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile } from "herdr";
+import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile, shared, setShared } from "herdr";
 import { awayPath, findCandidates, inboxPath, listHomes, needsCheck, scriptPath, showPath } from "./homes.js";
 import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings } from "./bearings.js";
 import { dropGoneRecords, keysToFetch } from "./records.js";
@@ -12,6 +12,7 @@ import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
+import { withPanel } from "./panels.js";
 import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
@@ -19,6 +20,7 @@ const CLOCK_EVERY_MS = 5000;
 const SENT_SHOWN_MS = 1500;
 const SENT_FLASH_MS = 3000;
 const REPO_URL = "https://github.com/chrisggraham/herdr-firstmate-bearings";
+const PANEL_ID = "firstmate-bearings";
 const PICK_STORE = "picked";
 const COLLAPSED_STORE = "collapsed";
 const EXPANDED_STORE = "expanded";
@@ -41,6 +43,9 @@ export default class FirstmateBearings extends View {
   init(_props, cx) {
     if (props()?.ask) return this.initAsk(cx);
     if (props()?.confirm) return this.initConfirm();
+    // The tab bar remembers an open panel per space only if its id is in "workspace.panels".
+    const panels = withPanel(shared("workspace.panels"), PANEL_ID);
+    if (panels) setShared("workspace.panels", panels);
     this.checks = new Map();
     this.counts = new Map();
     this.away = false;
