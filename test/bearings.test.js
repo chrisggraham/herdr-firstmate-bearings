@@ -28,7 +28,8 @@ test("an unknown schema gives the unsupported state and no sections", () => {
 test("missing keys give empty sections", () => {
   const bearings = readBearings(JSON.stringify({ schema: "fm-bearings.v1" }));
   assert.ok(Object.values(countsOf(bearings)).every((n) => n === 0));
-  assert.deepEqual(bearings.notes, []);
+  assert.equal(bearings.health, null);
+  assert.equal(bearings.hidden, null);
 });
 
 test("unknown keys are ignored", () => {
@@ -36,11 +37,19 @@ test("unknown keys are ignored", () => {
   assert.equal(bearings.sections.length, 6);
 });
 
-test("omitted and unhealthy endpoints give their notes", () => {
-  assert.deepEqual(readBearings(fixture).notes, [
-    { kind: "warning", text: "1 unhealthy endpoint" },
-    { kind: "more", text: "More not shown" },
-  ]);
+test("an unhealthy endpoint reads as a plain sentence naming the task", () => {
+  assert.equal(readBearings(fixture).health, "A secondmate task has no running agent: sm-b/t-9");
+  const two = JSON.stringify({ schema: "fm-bearings.v1", unhealthy_endpoints: [{ id: "a/1" }, { id: "b/2" }] });
+  assert.equal(readBearings(two).health, "2 secondmate tasks have no running agent: a/1, b/2");
+});
+
+test("omitted lists give a hidden count and the flags that reveal them", () => {
+  assert.deepEqual(readBearings(fixture).hidden, { count: 3, flags: ["--all-landed"] });
+});
+
+test("an omitted surface with no reveal flag is not offered", () => {
+  const text = JSON.stringify({ schema: "fm-bearings.v1", omitted: [{ surface: "prs not requested", reveal: "--include-prs" }] });
+  assert.equal(readBearings(text).hidden, null);
 });
 
 test("PR rows carry their URLs and other rows do not", () => {

@@ -24,7 +24,8 @@ export default class FirstmateBearings extends View {
     this.listOpen = false;
     this.collapsed = new Set();
     this.shown = null;
-    this.running = false;
+    this.running = null;
+    this.reveal = [];
     cx.timer.every(FETCH_EVERY_MS, (cx) => this.fetch(cx));
     cx.timer.every(CLOCK_EVERY_MS, (cx) => cx.notify());
   }
@@ -66,6 +67,7 @@ export default class FirstmateBearings extends View {
     this.data = null;
     this.error = null;
     this.updated = null;
+    this.reveal = [];
     if (home) this.fetch(cx);
   }
 
@@ -78,21 +80,28 @@ export default class FirstmateBearings extends View {
 
   fetch(cx) {
     const home = this.home;
-    if (!home || this.running) return;
-    this.running = true;
+    if (!home || this.running === home.key) return;
+    this.running = home.key;
+    const reveal = this.reveal;
     cx.spawn(async (cx) => {
       try {
-        const result = await exec(scriptPath(home), ["--json"], { on: home.machine });
+        const result = await exec(scriptPath(home), ["--json", ...this.reveal], { on: home.machine });
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
         const bearings = readBearings(result.stdout);
-        if (this.home?.key === home.key) Object.assign(this, { data: bearings, error: null, updated: Date.now() });
+        if (this.home?.key === home.key && this.reveal === reveal) Object.assign(this, { data: bearings, error: null, updated: Date.now() });
       } catch (e) {
         if (this.home?.key === home.key) this.error = firstLine(e.message ?? e);
       } finally {
-        this.running = false;
+        if (this.running === home.key) this.running = null;
         cx.notify();
       }
     });
+  }
+
+  setReveal(flags, cx) {
+    this.reveal = flags;
+    this.running = null;
+    this.fetch(cx);
   }
 
   toggle(id, cx) {
@@ -139,25 +148,35 @@ export default class FirstmateBearings extends View {
   }
 
   noteLines(t) {
-    const notes = (this.data?.notes ?? []).filter((note) => note.kind === "warning");
-    const unsupported = this.data?.unsupported ? [this.data.unsupported] : [];
-    return [...notes.map((note) => note.text), ...unsupported]
-      .map((text) => div().px(14).py(6).text_size(12).text_color(t.blocked).child(text));
+    const texts = [this.data?.unsupported, this.data?.health].filter(Boolean);
+    return texts.map((text) => div().px(14).py(6).text_size(12).text_color(t.muted).child(text));
   }
 
   sectionViews(t) {
     const sections = (this.data?.sections ?? []).map((section) => this.sectionView(section, t));
-    const more = (this.data?.notes ?? []).filter((note) => note.kind === "more");
-    return [...sections, ...more.map((note) => div().px(14).py(8).text_size(11).text_color(t.dim).child(note.text))];
+    return [...sections, ...this.revealControl(t)];
+  }
+
+  // "Show N more" fetches the full lists; "Show fewer" goes back to the short ones.
+  revealControl(t) {
+    const hidden = this.data?.hidden;
+    const showing = this.reveal.length > 0;
+    if (!hidden && !showing) return [];
+    const label = showing ? "Show fewer" : hidden.count > 0 ? `Show ${hidden.count} more` : "Show more";
+    return [div().id("firstmate-reveal").mx(10).mt(8).h(28).flex_none().flex().items_center().justify_center().rounded(6)
+      .border_1().border_color(t.border).text_size(12).text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => this.setReveal(showing ? [] : hidden.flags, cx)).child(label)];
   }
 
   sectionView(section, t) {
     const open = !this.collapsed.has(section.id);
-    const header = h_flex().id(`section-${section.id}`).h(28).flex_none().px(14).gap(7).items_center().cursor_pointer()
-      .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.toggle(section.id, cx))
-      .child(svg(`mods/firstmate-bearings/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))
-      .child(div().flex_1().font_semibold().text_color(section.highlighted ? t.blocked : t.foreground).child(section.title))
-      .child(div().text_size(11).text_color(section.highlighted ? t.blocked : t.dim).child(String(section.count)));
+    const alert = section.highlighted;
+    const header = h_flex().id(`section-${section.id}`).h(30).flex_none().mx(8).mt(8).px(8).gap(7).items_center().rounded(6)
+      .bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.toggle(section.id, cx))
+      .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))
+      .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(alert ? t.blocked : t.foreground).child(section.title))
+      .child(div().px(7).h(18).flex().items_center().rounded(9).bg(t.hover).text_size(11).text_color(alert ? t.blocked : t.muted)
+        .child(String(section.count)));
     const rows = open ? section.rows.map((row, i) => this.rowView(section.id, row, i, t)) : [];
     return v_flex().flex_none().child(header).children(rows);
   }

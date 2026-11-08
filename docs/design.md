@@ -8,7 +8,7 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 - `schema` must be `fm-bearings.v1`. Anything else shows "Unsupported bearings version (got X)" and no sections.
 - Ignore unknown keys. A missing key is an empty section.
 - Never read Firstmate's `state/` or `data/`. Never use the output's `home` field (it can be relative); the name comes from discovery.
-- Use the default limited output, with no `--include-prs`. When `omitted[]` is non-empty, show "More not shown".
+- Use the default limited output, with no `--include-prs`. When `omitted[]` is non-empty, show a "Show N more" button that fetches the full lists in place; "Show fewer" goes back.
 - Command: `exec("<home>/bin/fm-bearings-snapshot.sh", ["--json"], {on: machine})`, 30 s timeout, `on` omitted for this machine.
 
 ## Discovery
@@ -37,7 +37,7 @@ Switcher, "updated 12s ago", then collapsible sections with counts (collapsed st
 5. **Queued**: `gates[].title`.
 6. **Landed**: `landed[].what`.
 
-A warning line shows when `unhealthy_endpoints` is non-empty. Not shown: `reports`, `contributions`, `candidate_prs`.
+A muted line in plain words names each secondmate task with no running agent when `unhealthy_endpoints` is non-empty; it is not an alarm. Not shown: `reports`, `contributions`, `candidate_prs`.
 
 ## Not built
 
