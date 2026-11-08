@@ -3,9 +3,9 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, exec, theme, props, openOverlay, closeOverlay, notify } from "herdr";
-import { findCandidates, listHomes, scriptPath } from "./homes.js";
+import { findCandidates, inboxPath, listHomes, scriptPath } from "./homes.js";
 import { readBearings } from "./bearings.js";
-import { NOTE_SCRIPT, noteArgs, newRequestId } from "./ask.js";
+import { noteArgs, newRequestId } from "./ask.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
@@ -133,11 +133,10 @@ export default class FirstmateBearings extends View {
   send(cx) {
     if (this.sending) return;
     this.sending = true;
-    const { machine, folder, homeName, sectionId, itemId } = this.ask;
-    const script = `${folder.replace(/\/+$/, "")}/${NOTE_SCRIPT}`;
+    const { machine, homeName, sectionId, itemId } = this.ask;
     cx.spawn(async (cx) => {
       try {
-        const result = await exec(script, noteArgs(this.requestId, sectionId, itemId, this.text), { on: machine });
+        const result = await exec(inboxPath(this.ask), noteArgs(this.requestId, sectionId, itemId, this.text), { on: machine });
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
         notify({ title: `Sent to ${homeName}`, level: "success" });
         closeOverlay(props().overlay);
@@ -154,7 +153,7 @@ export default class FirstmateBearings extends View {
     if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
   }
 
-  askView(cx) {
+  askView() {
     const t = theme();
     const button = (id, text, primary, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
       .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
@@ -172,7 +171,7 @@ export default class FirstmateBearings extends View {
   }
 
   render(cx) {
-    if (this.ask) return this.askView(cx);
+    if (this.ask) return this.askView();
     const t = theme();
     const candidates = findCandidates(spaces(), panes());
     this.discover(candidates, cx);

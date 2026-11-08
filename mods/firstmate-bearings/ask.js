@@ -2,7 +2,6 @@
 // The note holds the section and the item id, never the row's text: row text can come from worker output.
 
 export const MAX_ID_LENGTH = 64;
-export const NOTE_SCRIPT = "bin/fm-inbox.sh";
 
 const PREFIX = "[bearings panel] discuss";
 
