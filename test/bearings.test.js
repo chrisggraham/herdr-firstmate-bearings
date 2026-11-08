@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { cardOf, isAwayRefusal, readBearings, taskRecordKeys, REVEAL_FLAGS } from "../mods/firstmate-bearings/bearings.js";
+import { cardOf, repoOf, isAwayRefusal, readBearings, taskRecordKeys, REVEAL_FLAGS } from "../mods/firstmate-bearings/bearings.js";
 
 const fixture = readFileSync(new URL("./fixtures/bearings.json", import.meta.url), "utf8");
 const countsOf = (bearings) => Object.fromEntries(bearings.sections.map((s) => [s.id, s.count]));
@@ -189,4 +189,16 @@ test("a card leaves out the fields it already shows in its own way", () => {
 test("a card keeps a state it does not show as a pill, and leaves out the state unknown", () => {
   assert.deepEqual(cardOf({ title: "T", facts: [["State", "paused"]] }, undefined).fields, [["State", "paused"]]);
   assert.deepEqual(cardOf({ title: "T", facts: [["State", "unknown"]] }, undefined).fields, []);
+});
+
+test("a landed card shows the repo from its task record, never from a URL", () => {
+  const row = { title: "T", facts: [], url: "https://github.com/o/from-url/pull/1" };
+  assert.equal(repoOf(row, { repo: "example-repo" }), "example-repo");
+  assert.equal(repoOf(row, { repo: "-" }), "");
+  assert.equal(repoOf(row, undefined), "");
+});
+
+test("the PR's repo and the snapshot repo come before the record repo", () => {
+  assert.equal(repoOf({ pr: { repo: "o/pr" }, repo: "o/snap" }, { repo: "rec" }), "o/pr");
+  assert.equal(repoOf({ repo: "o/snap" }, { repo: "rec" }), "o/snap");
 });

@@ -43,7 +43,7 @@ Top-level keys the panel does not read: `schema` (enum, `fm-bearings.v1`; the pa
 | `id` | id | Task id | `example-task` | Key for the task record |
 | `kind` | enum (`ship`, `task`) | Kind of work | `ship` | Badge "kind" |
 | `state` | enum (`working`, `paused`, `done`) | Worker state | `working` | Status pill |
-| `repo` | text | Repository name | `example-repo` | Repo label |
+| `repo` | text | Repository name | `example-repo` | Repo on line 2 |
 | `name` | text | Task title | `Add a search box` | Card title |
 | `doing` | text | What the worker does now | `tests green on branch` | Detail line, and the text field "Doing" on the opened card (notes that start with `backend` are hidden) |
 
@@ -85,6 +85,8 @@ Top-level keys the panel does not read: `schema` (enum, `fm-bearings.v1`; the pa
 | `id` | id | Task id | `example-done` | Key for the task record |
 | `what` | text | Title of the finished work | `Add a search box` | Card title |
 | `artifact` | URL | Where the work landed (a merged pull request) | `https://example.com/acme/app/pull/9` | Link chip "PR #9" |
+
+A landed item has no `repo`. The panel uses the `repo` of its task record.
 | `owner` | text | Owning home | `(main)` | Field "Owner" |
 
 ## Task record
@@ -103,7 +105,7 @@ Top-level keys the panel does not read: `schema` (enum, `fm-bearings.v1`; the pa
 | `hold_kind` | enum (`captain`) | Who must act | `captain` | Badge "hold kind" |
 | `hold_until` | date or `-` | Hold ends on this day | `2030-06-20` | Badge "hold until in 5d" |
 | `kind` | enum (`ship`, `task`, `ops`, `scout`, `docs`, `captain`) | Kind of work | `ship` | Badge "kind" |
-| `repo` | text | Repository | `example-repo` | Repo label |
+| `repo` | text | Repository | `example-repo` | Repo on line 2 |
 | `priority` | number or `-` | Priority | `1` | Badge "priority" |
 | `created` | date | Day it was filed | `2030-06-10` | Badge "created 5d ago" |
 | `closed` | date or `-` | Day it was closed | `2030-06-14` | Badge "closed 1d ago" |
@@ -111,20 +113,30 @@ Top-level keys the panel does not read: `schema` (enum, `fm-bearings.v1`; the pa
 | `links` | list (`<name>:<URL or path>`) | Pull requests and reports | `pr:https://example.com/acme/app/pull/12` | Link chip "PR #12" |
 | `body` | text | Long description | `Add a search box to the page header.` | Text field "Body" |
 
-## Layout of an opened card
+## Layout of a card
 
-The panel has no key and value table. An opened card has these parts, top to bottom:
+A card has two lines. A closed card shows only these two lines. An opened card adds the parts below them.
 
-1. The title row and the repo and detail line, as in a closed card.
-2. One wrapping row of **badges**: short values (enum, boolean, date, id, priority, kind). A badge is small and rounded with a subtle background. The key is a dim prefix ("kind ship"). A boolean shows only when true, as its name ("blocked"). A date shows as a relative age ("filed 3d ago") with the full date as the tooltip.
+**Line 1:** the title, cut to one line when closed, with the status pill or the PR chip at its right. A click on line 1 opens or closes the card.
+
+**Line 2:** always shown, even with no badges. A click on line 2 runs an action and never opens the card.
+
+- Left: the repo (git-branch icon), then the most useful short badges. The line does not wrap. A badge that does not fit is left for the opened card.
+- Right: every valid action icon for the section, then Discuss.
+- The repo comes from the PR, then the snapshot row, then the `repo` of the task record. The snapshot has no repo for Landed rows, so the record gives it. The panel never takes a repo from a URL.
+- Badge order on line 2: kind, priority, blocked, held, filed, closed, created, hold until, blocked by, hold kind, deps. The line holds about 26 characters of badges. A badge such as `id` is never on line 2.
+
+**Opened part**, top to bottom:
+
+1. The detail line (for example what the worker does now).
+2. One wrapping row of the **badges** not on line 2: short values (enum, boolean, date, id, priority, kind). A badge is small and rounded with a subtle background. The key is a dim prefix ("kind ship"). A boolean shows only when true, as its name ("blocked"). A date shows as a relative age ("filed 3d ago") with the full date as the tooltip.
 3. **Text paragraphs**: `hold_reason`, `question`, `body`, `reason`, and any value longer than 40 characters. Each has a small dim label above and wraps in the softer value color. A URL inside a text paragraph stays a link.
-4. A **footer** of one line below a thin divider. Link chips are on the left. The action icons and Discuss are on the right. Both are centered vertically.
+4. **Link chips** below a thin divider.
 
 Rules:
 
 - A field the card shows in another way is skipped (title, repo, state as the status pill, the PR URL as the PR chip). An empty value is skipped.
-- A URL in any other field is never shown as raw text. It becomes a link chip in the footer. A pull request shows the git-compare icon and "PR #12". Any other URL shows a link icon with the host and last path part ("docs.example.com/setup"). The same URL shows once.
-- A card with no badges, no text and no links shows only the footer.
+- A URL in any other field is never shown as raw text. It becomes a link chip in the opened part. A pull request shows the git-compare icon and "PR #12". Any other URL shows a link icon with the host and last path part ("docs.example.com/setup"). The same URL shows once.
 
 ## Ideas
 
