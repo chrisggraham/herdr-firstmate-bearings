@@ -25,7 +25,7 @@ export function readBearings(text) {
   if (snapshot?.schema !== SCHEMA) return { unsupported: `Unsupported bearings version (got ${snapshot?.schema})`, sections: [], health: null, hidden: null };
 
   const sections = SECTIONS.map(({ id, title, highlight, items, row }) => {
-    const rows = items(snapshot).map(row);
+    const rows = items(snapshot).map((item) => ({ ...row(item), itemId: item.id }));
     return { id, title, count: rows.length, rows, highlighted: Boolean(highlight) && rows.length > 0 };
   });
   return { unsupported: null, sections, health: healthOf(snapshot), hidden: hiddenOf(snapshot) };

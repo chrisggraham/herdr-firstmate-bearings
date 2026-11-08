@@ -66,3 +66,9 @@ test("an unreadable secondmate is flagged", () => {
 test("text that is not JSON throws", () => {
   assert.throws(() => readBearings("not json"));
 });
+
+test("every row carries its item id for the Ask dialog", () => {
+  const sections = readBearings(fixture).sections;
+  assert.deepEqual(sections.map((s) => s.rows.map((r) => r.itemId)),
+    [["d-1"], ["t-1", "t-2"], ["t-1"], ["sm-a", "sm-b"], ["g-1", "g-2"], ["t-0"]]);
+});

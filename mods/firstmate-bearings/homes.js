@@ -23,7 +23,11 @@ export function findCandidates(spaces, panes) {
 
 export const homeKey = (machine, folder) => JSON.stringify([machine, folder]);
 
-export const scriptPath = (home) => `${home.folder.replace(/\/+$/, "")}/${SCRIPT}`;
+const pathIn = (home, file) => `${home.folder.replace(/\/+$/, "")}/${file}`;
+
+export const scriptPath = (home) => pathIn(home, SCRIPT);
+
+export const inboxPath = (home) => pathIn(home, "bin/fm-inbox.sh");
 
 // The space's name when someone named it, else the folder's name.
 export function homeName(candidate) {
