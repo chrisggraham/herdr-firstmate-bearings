@@ -95,3 +95,9 @@ test("an opened card lists the facts the snapshot has and skips empty ones", () 
   assert.deepEqual(sections.queued.rows[0].facts, ["Owner: fleet", "Filed: 2026-01-01"]);
   assert.deepEqual(sections.decisions.rows[0].facts.slice(0, 1), ["Question: Which name for the widget? A or B."]);
 });
+
+test("every row carries its item id for the Ask dialog", () => {
+  const sections = readBearings(fixture).sections;
+  assert.deepEqual(sections.map((s) => s.rows.map((r) => r.itemId)),
+    [["d-1"], ["t-1", "t-2"], ["t-1"], ["sm-a", "sm-b"], ["g-1", "g-2"], ["t-0"]]);
+});

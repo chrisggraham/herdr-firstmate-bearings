@@ -52,7 +52,7 @@ export function readBearings(text, { hideEmpty = true } = {}) {
   if (snapshot?.schema !== SCHEMA) return { unsupported: `Unsupported bearings version (got ${snapshot?.schema})`, sections: [], hidden: null };
 
   const sections = SECTIONS.map(({ id, title, highlight, items, row }) => {
-    const rows = items(snapshot).map((item) => row(item, snapshot));
+    const rows = items(snapshot).map((item) => ({ ...row(item, snapshot), itemId: item.id }));
     return { id, title, count: rows.length, rows, highlighted: Boolean(highlight) && rows.length > 0 };
   }).filter((section) => !hideEmpty || section.count > 0);
   return { unsupported: null, sections, hidden: hiddenOf(snapshot) };

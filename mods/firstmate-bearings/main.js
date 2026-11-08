@@ -1,10 +1,11 @@
-// A sidebar panel that shows the bearings of one open Firstmate. Read-only: it never
-// switches tabs and never changes Firstmate.
+// A sidebar panel that shows the bearings of one open Firstmate. It never switches tabs.
+// openAskDialog opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, machines, exec, theme, appHome, readTextFile, writeTextFile } from "herdr";
-import { findCandidates, listHomes, scriptPath } from "./homes.js";
+import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile } from "herdr";
+import { findCandidates, inboxPath, listHomes, scriptPath } from "./homes.js";
 import { readBearings } from "./bearings.js";
+import { noteArgs, newRequestId } from "./ask.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 
@@ -24,6 +25,7 @@ const firstLine = (text) => String(text).trim().split("\n")[0];
 
 export default class FirstmateBearings extends View {
   init(_props, cx) {
+    if (props()?.ask) return this.initAsk(cx);
     this.isHome = new Map();
     this.picked = localStorage.getItem(PICK_STORE);
     this.listOpen = false;
@@ -134,7 +136,69 @@ export default class FirstmateBearings extends View {
     cx.notify();
   }
 
+  // The dialog: one text input, Cancel and Send. It runs no timers and no discovery.
+  initAsk(cx) {
+    this.ask = props().ask;
+    this.requestId = newRequestId();
+    this.text = "";
+    this.sending = false;
+    this.input = InputState.new({ value: "" });
+    this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
+    this.input.on("submit", (_e, cx) => this.send(cx));
+    this.input.focus();
+    cx.timer.after(600, () => this.input.focus());
+    this.handle = cx.focus_handle();
+  }
+
+  // The way in for the panel: call this from the "Ask Firstmate" button of an expanded card.
+  openAskDialog(sectionId, itemId) {
+    const home = this.home;
+    const ask = { machine: home.machine, folder: home.folder, homeName: home.name, sectionId, itemId };
+    openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
+  }
+
+  send(cx) {
+    if (this.sending) return;
+    this.sending = true;
+    const { machine, homeName, sectionId, itemId } = this.ask;
+    cx.spawn(async (cx) => {
+      try {
+        const result = await exec(inboxPath(this.ask), noteArgs(this.requestId, sectionId, itemId, this.text), { on: machine });
+        if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
+        notify({ title: `Sent to ${homeName}`, level: "success" });
+        closeOverlay(props().overlay);
+      } catch (e) {
+        notify({ title: `Could not send to ${homeName}`, body: firstLine(e.message ?? e), level: "error" });
+      } finally {
+        this.sending = false;
+        cx.notify();
+      }
+    });
+  }
+
+  askKey(e, cx) {
+    if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
+  }
+
+  askView() {
+    const t = theme();
+    const button = (id, text, primary, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
+      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
+      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
+      .hover((s) => s.opacity(0.88)).on_click(action).child(text);
+    return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
+      .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
+      .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Ask ${this.ask.homeName} about this`))
+        .child(div().text_size(11).text_color(t.dim).child("Esc")))
+      .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
+      .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(h_flex().pt(20).gap(8).justify_end()
+        .child(button("ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
+        .child(button("ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
+  }
+
   render(cx) {
+    if (this.ask) return this.askView();
     const t = theme();
     const candidates = findCandidates(spaces(), panes());
     this.discover(candidates, cx);
@@ -223,9 +287,12 @@ export default class FirstmateBearings extends View {
       .child(div().text_size(13).font_semibold().text_color(row.flagged ? t.blocked : t.foreground)
         .when(!open, (el) => el.max_h(36).overflow_hidden()).child(row.title));
     if (!open) return card.when(Boolean(row.detail), (el) => el.child(div().text_size(11.5).text_color(t.muted).truncate().child(row.detail)));
-    // The "Ask Firstmate" button goes at the end of this opened card, when the ask dialog lands on main.
     const lines = [row.detail, ...row.facts].filter(Boolean).map((text) => div().text_size(11.5).text_color(t.muted).child(text));
-    return card.children(lines).when(Boolean(row.url), (el) => el.child(div().id(`link-${id}`).text_size(11.5).text_color(t.accent)
-      .cursor_pointer().on_click((_e, cx) => cx.open_url(row.url)).child(row.url)));
+    const link = div().id(`link-${id}`).text_size(11.5).text_color(t.accent).cursor_pointer()
+      .on_click((_e, cx) => cx.open_url(row.url)).child(row.url);
+    const ask = h_flex().id(`ask-${id}`).mt(4).h(26).px(10).items_center().justify_center().rounded(6).border_1().border_color(t.border)
+      .text_size(12).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.selected))
+      .on_click(() => this.openAskDialog(sectionId, row.itemId)).child("Ask Firstmate");
+    return card.children(lines).when(Boolean(row.url), (el) => el.child(link)).child(ask);
   }
 }

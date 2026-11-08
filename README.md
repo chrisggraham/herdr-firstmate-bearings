@@ -25,6 +25,8 @@ The mod runs `bin/fm-bearings-snapshot.sh` from a Firstmate home on your machine
 2. Pick one. With exactly one found, the panel shows it at once.
 3. With more than one Firstmate, click the name box at the top (it has a chevron) to go back to the list. With one Firstmate, the panel opens it directly and shows no box.
 
+The **Ask Firstmate** button in an expanded card asks that Firstmate about the item. A dialog takes a short note. **Send** adds the note to that Firstmate's inbox with `bin/fm-inbox.sh note`, with only the section and the item id (never the row's text). Enter sends and Esc cancels. Nothing is typed into the Firstmate pane.
+
 The pick is shared by every tab and is kept across restarts. A Firstmate is found when one of its panes is open in its home folder. A Firstmate with only a worker tab open is not found.
 
 ## Settings
