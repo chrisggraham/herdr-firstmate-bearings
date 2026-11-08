@@ -9,12 +9,15 @@ import { dropGoneRecords, keysToFetch } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
 import { noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
+import { splitUrls } from "./urls.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
+const SENT_SHOWN_MS = 1500;
+const SENT_FLASH_MS = 3000;
 const REPO_URL = "https://github.com/chrisggraham/herdr-firstmate-bearings";
 const PICK_STORE = "picked";
 const COLLAPSED_STORE = "collapsed";
@@ -52,6 +55,7 @@ export default class FirstmateBearings extends View {
     this.records = new Map();
     this.logging = Promise.resolve();
     this.pending = new Set();
+    this.sentKeys = new Set();
     this.shown = null;
     this.running = null;
     cx.timer.every(FETCH_EVERY_MS, (cx) => { this.fetch(cx); this.checkAway(cx); });
@@ -234,6 +238,8 @@ export default class FirstmateBearings extends View {
     this.requestId = newRequestId();
     this.text = "";
     this.sending = false;
+    this.sent = false;
+    this.failure = null;
     this.input = InputState.new({ value: "" });
     this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
     this.input.on("submit", (_e, cx) => this.send(cx));
@@ -249,16 +255,17 @@ export default class FirstmateBearings extends View {
     openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
   }
 
-  // Sends one note to a Firstmate and shows a toast. Returns true when the note was sent.
+  // Sends one note to a Firstmate and shows a toast. Returns null when the note was sent, else the error text.
   async deliver({ machine, folder, homeName }, args, sent) {
     try {
       const result = await exec(inboxPath({ machine, folder }), args, { on: machine });
       if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
       notify({ title: `${sent} ${homeName}`, level: "success" });
-      return true;
+      return null;
     } catch (e) {
-      notify({ title: `Could not send to ${homeName}`, body: firstLine(e.message ?? e), level: "error" });
-      return false;
+      const error = firstLine(e.message ?? e);
+      notify({ title: `Could not send to ${homeName}`, body: error, level: "error" });
+      return error;
     }
   }
 
@@ -266,15 +273,22 @@ export default class FirstmateBearings extends View {
     if (this.sending) return;
     this.sending = true;
     const { sectionId, itemId } = this.ask;
-    cx.spawn(async (cx) => {
-      if (await this.deliver(this.ask, noteArgs(this.requestId, sectionId, itemId, this.text), "Sent to")) closeOverlay(props().overlay);
-      this.sending = false;
-      cx.notify();
-    });
+    cx.spawn(async (cx) => this.finishSend(cx, await this.deliver(this.ask, noteArgs(this.requestId, sectionId, itemId, this.text), "Sent to")));
+  }
+
+  // After a send: on success the dialog shows "Sent" for a moment and closes; on failure it stays open with the error text.
+  finishSend(cx, error) {
+    this.sending = false;
+    this.failure = error;
+    if (!error) {
+      this.sent = true;
+      cx.timer.after(SENT_SHOWN_MS, () => closeOverlay(props().overlay));
+    }
+    cx.notify();
   }
 
   // A button of a card: Drop and Stop ask first, the others send at once.
-  runAction(action, section, row) {
+  runAction(action, section, row, cx) {
     const home = this.home;
     const target = { machine: home.machine, folder: home.folder, homeName: home.name };
     if (ACTIONS[action].confirm) {
@@ -287,7 +301,15 @@ export default class FirstmateBearings extends View {
     if (this.pending.has(key)) return;
     this.pending.add(key);
     this.deliver(target, actionArgs(newRequestId(), action, section.id, row.itemId), `${ACTIONS[action].label} sent to`)
+      .then((error) => { if (!error) this.flashSent(key, cx); })
       .finally(() => this.pending.delete(key));
+  }
+
+  // The button shows a check for a few seconds after its action was sent.
+  flashSent(key, cx) {
+    this.sentKeys.add(key);
+    cx.notify();
+    cx.timer.after(SENT_FLASH_MS, () => { this.sentKeys.delete(key); cx.notify(); });
   }
 
   // The confirm dialog: "<Action> <title>?" with Cancel and the action.
@@ -295,25 +317,36 @@ export default class FirstmateBearings extends View {
     this.confirm = props().confirm;
     this.requestId = newRequestId();
     this.sending = false;
+    this.sent = false;
+    this.failure = null;
   }
 
   sendConfirmed(cx) {
     if (this.sending) return;
     this.sending = true;
     const { action, sectionId, itemId } = this.confirm;
-    cx.spawn(async (cx) => {
-      if (await this.deliver(this.confirm, actionArgs(this.requestId, action, sectionId, itemId), `${ACTIONS[action].label} sent to`)) closeOverlay(props().overlay);
-      this.sending = false;
-      cx.notify();
-    });
+    cx.spawn(async (cx) => this.finishSend(cx, await this.deliver(this.confirm, actionArgs(this.requestId, action, sectionId, itemId), `${ACTIONS[action].label} sent to`)));
+  }
+
+  // The body of a dialog after a send: a check and the confirmation text.
+  sentView(t, text) {
+    return v_flex().w_full().p(18).gap(8).items_center().bg(t.popover).text_color(t.foreground)
+      .child(svg("mods/firstmate-bearings/action-done.svg").size(22).flex_none().text_color(t.accent))
+      .child(div().text_size(14).font_semibold().child(text));
+  }
+
+  failureLine(t) {
+    return this.failure ? div().pt(10).text_size(12).text_color(t.blocked).child(`Could not send: ${this.failure}`) : null;
   }
 
   confirmView() {
     const t = theme();
     const { action, title } = this.confirm;
     const label = ACTIONS[action].label;
+    if (this.sent) return this.sentView(t, `${label} sent to ${this.confirm.homeName}`);
     return v_flex().id("firstmate-confirm").w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(div().text_size(14).font_semibold().child(`${label} ${title}?`))
+      .children([this.failureLine(t)].filter(Boolean))
       .child(h_flex().pt(20).gap(8).justify_end()
         .child(this.dialogButton(t, "confirm-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
         .child(this.dialogButton(t, "confirm-send", this.sending ? "Sending…" : label, true, (_e, cx) => this.sendConfirmed(cx))));
@@ -333,12 +366,14 @@ export default class FirstmateBearings extends View {
 
   askView() {
     const t = theme();
+    if (this.sent) return this.sentView(t, `Sent to ${this.ask.homeName}`);
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Discuss with ${this.ask.homeName}`))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
       .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .children([this.failureLine(t)].filter(Boolean))
       .child(h_flex().pt(20).gap(8).justify_end()
         .child(this.dialogButton(t, "ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
         .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
@@ -476,7 +511,7 @@ export default class FirstmateBearings extends View {
   }
 
   // A card has a bar in its section's color, its title (one line cut to the width, wrapped in full when opened), a status pill and a muted line with
-  // the repo and detail. A left click opens it to every field; a PR chip opens the PR.
+  // the repo and detail. A click on the title row opens or closes it; the opened body does not close it. A PR chip or a URL opens in the browser.
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
     const open = this.expanded.has(id);
@@ -488,25 +523,30 @@ export default class FirstmateBearings extends View {
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
       .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
-    const buttons = open ? actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t)) : [];
-    const top = h_flex().gap(8).items_start().child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
-      .when(open, (el) => el.child(discuss));
-    const actions = buttons.length > 0 ? h_flex().gap(2).items_center().children(buttons) : null;
-    const view = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
-      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => this.toggleCard(id, cx)).child(top);
+    const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
+      .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)));
+    const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
+      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top);
     const meta = this.metaLine(row, t);
     const grid = open ? this.fieldGrid(card.fields, t) : [];
-    return view.when(Boolean(meta), (el) => el.child(meta)).when(Boolean(actions), (el) => el.child(actions)).children(grid);
+    return view.when(Boolean(meta), (el) => el.child(meta)).children(grid)
+      .when(open, (el) => el.child(this.actionRow(section, row, id, discuss, t)));
+  }
+
+  // The icon row at the bottom of an opened card, right-aligned below a thin divider: the action buttons, then Discuss.
+  actionRow(section, row, id, discuss, t) {
+    const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
+    return h_flex().gap(2).items_center().justify_end().mt(3).pt(6).border_t(1).border_color(t.border).children(buttons).child(discuss);
   }
 
   // A small icon button like Discuss: muted icon, accent on hover, the plain action name as tooltip.
   actionButton(action, section, row, id, t) {
     const { label, icon } = ACTIONS[action];
+    const sentNow = this.sentKeys.has(`${action} ${section.id} ${row.itemId}`);
     return h_flex().id(`${action}-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
-      .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(label)
-      .on_click((_e, cx) => { cx.stop_propagation(); this.runAction(action, section, row); })
-      .child(svg(`mods/firstmate-bearings/${icon}`).size(13).flex_none());
+      .text_color(sentNow ? t.accent : t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(sentNow ? "Sent" : label)
+      .on_click((_e, cx) => { cx.stop_propagation(); this.runAction(action, section, row, cx); })
+      .child(svg(`mods/firstmate-bearings/${sentNow ? "action-done.svg" : icon}`).size(13).flex_none());
   }
 
   // Every field of an opened card as a two-column grid: a small uppercase muted key and a value that wraps.
@@ -514,7 +554,18 @@ export default class FirstmateBearings extends View {
     return fields.map(([key, value], i) => h_flex().gap(8).items_start().py(3)
       .when(i > 0, (el) => el.border_t(1).border_color(t.border))
       .child(div().w(FIELD_KEY_WIDTH).flex_none().text_size(10).font_semibold().text_color(t.dim).child(key.toUpperCase()))
-      .child(div().flex_1().min_w(0).text_size(12).text_color(t.foreground).child(value)));
+      .child(this.fieldValue(value, i, t)));
+  }
+
+  // A field value: any http(s) URL in it is a link that opens in the browser; the rest is plain text.
+  fieldValue(value, index, t) {
+    const segments = splitUrls(value);
+    const box = v_flex().flex_1().min_w(0).text_size(12).text_color(t.foreground);
+    if (!segments.some((s) => s.url)) return box.child(String(value));
+    return box.children(segments.map((s, i) => s.url
+      ? div().id(`url-${index}-${i}`).text_color(t.accent).cursor_pointer().hover((el) => el.opacity(0.7))
+          .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(s.url); }).child(s.text)
+      : div().child(s.text)));
   }
 
   // The muted repo label and detail, then the PR chip when the card has one.
