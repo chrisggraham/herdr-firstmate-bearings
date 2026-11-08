@@ -115,28 +115,27 @@ A landed item has no `repo`. The panel uses the `repo` of its task record.
 
 ## Layout of a card
 
-A card has two lines. A closed card shows only these two lines. An opened card adds the parts below them.
+A card has two lines. A closed card shows only these two lines. An opened card adds the parts below them. All sections use this layout.
 
 **Line 1:** the title, cut to one line when closed, with the status pill or the PR chip at its right. A click on line 1 opens or closes the card.
 
-**Line 2:** always shown, even with no badges. A click on line 2 runs an action and never opens the card.
+**Line 2:** always shown, even with no repo. A click on line 2 runs an action and never opens the card.
 
-- Left: the repo (git-branch icon), then the most useful short badges. The line does not wrap. A badge that does not fit is left for the opened card.
+- Left: the repo (git-branch icon), shown in full, then the PR chip when the item has a PR link. The line does not wrap. When the line is too narrow, the PR chip is cut before the repo. No badge is on line 2.
 - Right: every valid action icon for the section, then Discuss.
 - The repo comes from the PR, then the snapshot row, then the `repo` of the task record. The snapshot has no repo for Landed rows, so the record gives it. The panel never takes a repo from a URL.
-- Badge order on line 2: kind, priority, blocked, held, filed, closed, created, hold until, blocked by, hold kind, deps. The line holds about 26 characters of badges. A badge such as `id` is never on line 2.
 
 **Opened part**, top to bottom:
 
-1. The detail line (for example what the worker does now).
-2. One wrapping row of the **badges** not on line 2: short values (enum, boolean, date, id, priority, kind). A badge is small and rounded with a subtle background. The key is a dim prefix ("kind ship"). A boolean shows only when true, as its name ("blocked"). A date shows as a relative age ("filed 3d ago") with the full date as the tooltip.
+1. One wrapping row of all the **badges**: short values (enum, boolean, date, id, priority, kind). A badge is small and rounded with a subtle background. The key is a dim prefix ("kind ship"). A boolean shows only when true, as its name ("blocked"). A date shows as a relative age ("filed 3d ago") with the full date as the tooltip. When `created` and `filed` have the same date, only "filed" shows. `closed` always shows.
+2. The detail line (for example what the worker does now).
 3. **Text paragraphs**: `hold_reason`, `question`, `body`, `reason`, and any value longer than 40 characters. Each has a small dim label above and wraps in the softer value color. A URL inside a text paragraph stays a link.
-4. **Link chips** below a thin divider.
+4. **Link chips** that are not the PR chip on line 2. There is no divider.
 
 Rules:
 
 - A field the card shows in another way is skipped (title, repo, state as the status pill, the PR URL as the PR chip). An empty value is skipped.
-- A URL in any other field is never shown as raw text. It becomes a link chip in the opened part. A pull request shows the git-compare icon and "PR #12". Any other URL shows a link icon with the host and last path part ("docs.example.com/setup"). The same URL shows once.
+- A URL in any other field is never shown as raw text. It becomes a link chip: the first pull request on line 2, any other link at the end of the opened part. A pull request shows the git-compare icon and "PR #12". Any other URL shows a link icon with the host and last path part ("docs.example.com/setup"). The same URL shows once.
 
 ## Ideas
 

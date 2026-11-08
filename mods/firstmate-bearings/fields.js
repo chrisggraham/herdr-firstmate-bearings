@@ -60,41 +60,18 @@ function badgeOf(label, key, value, now) {
   return { prefix: prefixOf(label), text: relative || value, tip: relative ? value : "" };
 }
 
-// Badges on the second line of a closed card, most useful first. A badge not listed (for example "id") never goes there.
-const LINE_BADGE_ORDER = ["kind", "priority", "blocked", "held", "filed", "closed", "created", "hold until", "blocked by", "hold kind", "deps"];
-// The second line does not wrap, so its badges share this many characters (prefix, text and padding).
-const LINE_BADGE_CHARS = 26;
-const BADGE_PADDING_CHARS = 2;
-
-const badgeLength = ({ prefix, text }) => prefix.length + text.length + BADGE_PADDING_CHARS;
-// A boolean badge has no prefix; its text is the name.
-const badgeRank = ({ prefix, text }) => LINE_BADGE_ORDER.indexOf(prefix || text);
-
-// Splits badges into { line, rest }: the useful ones that fit the second line, and the others for the opened card.
-// A badge that does not fit is dropped from the line, and a later smaller one can still take its place.
-export function lineBadges(badges) {
-  const ranked = badges.filter((badge) => badgeRank(badge) >= 0).sort((a, b) => badgeRank(a) - badgeRank(b));
-  const line = [];
-  let used = 0;
-  for (const badge of ranked) {
-    if (used + badgeLength(badge) > LINE_BADGE_CHARS) continue;
-    line.push(badge);
-    used += badgeLength(badge);
-  }
-  return { line, rest: badges.filter((badge) => !line.includes(badge)) };
-}
-
 // Splits [label, value] fields into badges, texts ({ label, value }) and links, keeping their order.
-// A boolean shows only when true. A long-text field keeps its URLs inside the text; any other
+// A boolean shows only when true. "created" is dropped when "filed" has the same date. A long-text field keeps its URLs inside the text; any other
 // field with a URL gives link chips and nothing else.
 export function typedFields(fields, now) {
   const badges = [];
   const texts = [];
   const links = new Map();
+  const filed = fields.find(([label]) => keyOf(label) === "filed")?.[1];
   for (const [label, rawValue] of fields) {
     const value = String(rawValue);
     const key = keyOf(label);
-    if (isFalse(value)) continue;
+    if (isFalse(value) || (key === "created" && value === String(filed))) continue;
     const urls = urlsIn(value);
     if (urls.length > 0 && !TEXT_KEYS.has(key)) urls.forEach((url) => links.set(url, linkOf(url)));
     else if (isLongText(key, value)) texts.push({ label, value });

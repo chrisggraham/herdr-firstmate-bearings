@@ -10,7 +10,7 @@ import { parseTaskRecord } from "./toon.js";
 import { discussLabel, noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
-import { lineBadges, typedFields } from "./fields.js";
+import { typedFields } from "./fields.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { withPanel } from "./panels.js";
@@ -520,55 +520,55 @@ export default class FirstmateBearings extends View {
   }
 
   // A card has a bar in its section's color and two lines. Line 1 is the title (one line cut to the width, wrapped in full when opened)
-  // and the status pill or PR chip; a click on it opens or closes the card. Line 2 is the repo and the badges that fit on the left
-  // and the action buttons on the right; a click on it only runs an action. The opened part below holds the detail, the other badges,
-  // the long texts and the link chips.
+  // and the status pill or PR chip; a click on it opens or closes the card. Line 2 is the repo and the PR chip on the left
+  // and the action buttons on the right; a click on it only runs an action. The opened part below holds the badges, the detail,
+  // the long texts and the other link chips.
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
     const open = this.expanded.has(id);
     const entry = this.records.get(this.home.key)?.get(row.itemId);
     const card = cardOf(row, entry?.record);
     const typed = typedFields(card.fields, Date.now());
-    const badges = lineBadges(typed.badges);
+    const prLink = row.pr ? undefined : typed.links.find((link) => link.isPr);
+    const otherLinks = typed.links.filter((link) => link !== prLink);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
       .when(!open, (el) => el.truncate()).child(card.title);
     const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
       .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
       .when(Boolean(row.pr), (el) => el.child(this.prChip(row, t)));
     const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
-      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top).child(this.secondLine(section, row, id, repoOf(row, entry?.record), badges.line, t));
-    return view.children(open ? this.openedRows(row, typed, badges.rest, entry, id, t) : []);
+      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top).child(this.secondLine(section, row, id, repoOf(row, entry?.record), prLink, t));
+    return view.children(open ? this.openedRows(row, typed, otherLinks, entry, id, t) : []);
   }
 
-  // The part of an opened card below the two lines: the detail, the other badges, the long texts, the link chips.
-  openedRows(row, typed, restBadges, entry, id, t) {
-    const links = typed.links.map((link, i) => this.linkChip(link, `${id}-${i}`, t));
+  // The part of an opened card below the two lines: all the badges, the detail, the long texts, the other link chips.
+  openedRows(row, typed, otherLinks, entry, id, t) {
+    const links = otherLinks.map((link, i) => this.linkChip(link, `${id}-${i}`, t));
     return [
-      ...(row.detail ? [div().text_size(11).text_color(t.muted).child(row.detail)] : []),
-      ...this.fieldRows({ badges: restBadges, texts: typed.texts }, t),
+      ...this.fieldRows({ badges: typed.badges, texts: typed.texts }, t, row.detail),
       ...(entry?.failedAt !== undefined ? [div().text_size(10.5).text_color(t.dim).child("Details unavailable")] : []),
-      ...(links.length > 0 ? [h_flex().flex_wrap().gap(4).items_center().mt(3).pt(6).border_t(1).border_color(t.border).children(links)] : []),
+      ...(links.length > 0 ? [h_flex().flex_wrap().gap(4).items_center().mt(3).children(links)] : []),
     ];
   }
 
-  // Line 2: the repo and the badges that fit on the left, no wrap; all the action buttons then Discuss on the right.
-  secondLine(section, row, id, repo, badges, t) {
+  // Line 2: the repo and the PR chip on the left, no wrap; all the action buttons then Discuss on the right.
+  secondLine(section, row, id, repo, prLink, t) {
     const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(discussLabel(this.home.name))
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
       .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
     const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
     const left = h_flex().flex_1().min_w(0).overflow_hidden().gap(4).items_center()
-      .children([repo && this.repoLabel(repo, t), ...badges.map((badge, i) => this.badge(badge, i, t))].filter(Boolean));
+      .children([repo && this.repoLabel(repo, t), prLink && this.linkChip(prLink, `${id}-pr`, t)].filter(Boolean));
     return h_flex().gap(6).items_center().child(left)
       .child(h_flex().gap(2).items_center().flex_none().children(buttons).child(discuss));
   }
 
   // The muted repo name with the git-branch icon.
   repoLabel(repo, t) {
-    return h_flex().flex_none().max_w(110).gap(4).items_center()
+    return h_flex().flex_none().gap(4).items_center()
       .child(svg("mods/workspace-chrome/git-branch.svg").size(11).flex_none().text_color(t.dim))
-      .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(repo));
+      .child(div().text_size(11).text_color(t.dim).child(repo));
   }
 
   // A chip for a URL, like the PR chip: a pull request has the git-compare icon, any other link a link icon.
@@ -590,13 +590,14 @@ export default class FirstmateBearings extends View {
       .child(svg(`mods/firstmate-bearings/${sentNow ? "action-done.svg" : icon}`).size(13).flex_none());
   }
 
-  // The fields of an opened card by type: one wrapping row of the badges not on line 2, then each long text
+  // The fields of an opened card by type: one wrapping row of all the badges, then the detail, then each long text
   // under a small muted label. Links are below them.
-  fieldRows({ badges, texts }, t) {
+  fieldRows({ badges, texts }, t, detail) {
     const row = badges.length > 0
       ? [h_flex().flex_wrap().gap(4).py(3).children(badges.map((badge, i) => this.badge(badge, i, t)))]
       : [];
-    return [...row, ...texts.map((text, i) => this.textField(text, i, t))];
+    const description = detail ? [div().text_size(11).text_color(t.muted).child(detail)] : [];
+    return [...row, ...description, ...texts.map((text, i) => this.textField(text, i, t))];
   }
 
   // A small rounded badge with a subtle background: the key as a dim prefix, then the value. A date shows its full date as tooltip.
