@@ -348,7 +348,7 @@ export default class FirstmateBearings extends View {
     const icon = busy ? svg("mods/workspace-chrome/spinner.svg").spin(900) : svg("mods/firstmate-bearings/refresh.svg");
     return h_flex().id("firstmate-refresh").size(26).flex_none().items_center().justify_center().rounded(6)
       .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.refresh(cx))
-      .child(icon.size(13).text_color(busy ? t.working : t.muted));
+      .child(icon.size(14).text_color(busy ? t.working : t.foreground));
   }
 
   errorLines(t) {
@@ -363,7 +363,7 @@ export default class FirstmateBearings extends View {
   }
 
   sectionViews(t) {
-    return (this.data?.sections ?? []).map((section) => this.sectionView(section, t));
+    return (this.data?.sections ?? []).map((section, i) => this.sectionView(section, t, i === 0));
   }
 
   // "Show N more" fetches the full list of one section; "Show fewer" goes back to the short list.
@@ -378,15 +378,17 @@ export default class FirstmateBearings extends View {
       .on_click((_e, cx) => this.setReveal(section.revealFlag, !showing, cx)).child(label)];
   }
 
-  sectionView(section, t) {
+  // A section header is a plain line, not a card: a divider above it, a bold title in the section's
+  // accent color and a count pill in the same color.
+  sectionView(section, t, first) {
     const open = !this.collapsed.has(section.id);
-    const alert = section.highlighted;
-    const header = h_flex().id(`section-${section.id}`).h(30).flex_none().mx(8).mt(8).px(8).gap(7).items_center().rounded(6)
-      .bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.toggle(section.id, cx))
-      .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))
-      .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(alert ? t.blocked : t.foreground).child(section.title))
-      .child(div().px(7).h(18).flex().items_center().rounded(9).bg(t.hover).text_size(11).text_color(alert ? t.blocked : t.muted)
-        .child(String(section.count)));
+    const accent = t[section.tone] ?? t.muted;
+    const header = h_flex().id(`section-${section.id}`).h(36).flex_none().mx(12).mt(first ? 4 : 14).gap(7).items_center()
+      .when(!first, (el) => el.border_t(1).border_color(t.border).pt(10))
+      .cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.toggle(section.id, cx))
+      .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(13).flex_none().text_color(accent))
+      .child(div().flex_1().min_w(0).truncate().text_size(14).font_bold().text_color(accent).child(section.title))
+      .child(this.pill(String(section.count), accent, accent + PILL_ALPHA));
     const rows = open ? section.rows.map((row, i) => this.rowView(section, row, i, t)) : [];
     return v_flex().flex_none().child(header).children(rows).children(open ? this.revealControl(section, t) : []);
   }
@@ -405,9 +407,11 @@ export default class FirstmateBearings extends View {
       .on_click((_e, cx) => this.toggleCard(id, cx)).child(top);
     const meta = this.metaLine(row, t);
     const lines = open ? row.facts.map((text) => div().text_size(11.5).text_color(t.muted).child(text)) : [];
-    const ask = h_flex().id(`ask-${id}`).mt(4).h(26).px(10).items_center().justify_center().rounded(6).border_1().border_color(t.border)
-      .text_size(12).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.selected))
-      .on_click(() => this.openAskDialog(section.id, row.itemId)).child("Ask Firstmate");
+    const ask = h_flex().id(`ask-${id}`).mt(4).h(26).px(10).gap(6).items_center().justify_center().rounded(6)
+      .bg(t.accent + PILL_ALPHA).text_size(12).font_semibold().text_color(t.accent).cursor_pointer()
+      .hover((s) => s.bg(t.accent + CHIP_HOVER_ALPHA))
+      .on_click(() => this.openAskDialog(section.id, row.itemId))
+      .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none()).child("Ask Firstmate");
     return card.when(Boolean(meta), (el) => el.child(meta)).children(lines).when(open, (el) => el.child(ask));
   }
 
@@ -415,8 +419,10 @@ export default class FirstmateBearings extends View {
   metaLine(row, t) {
     const repo = row.pr?.repo || row.repo;
     const parts = [
-      repo && div().flex_none().max_w(150).truncate().text_size(11).text_color(t.dim).child(repo),
-      row.detail && div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.muted).child(row.detail),
+      repo && h_flex().flex_none().max_w(150).gap(4).items_center()
+        .child(svg("mods/firstmate-bearings/repo.svg").size(11).flex_none().text_color(t.dim))
+        .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(repo)),
+      row.detail && div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(row.detail),
       row.pr && this.prChip(row, t),
     ].filter(Boolean);
     return parts.length > 0 ? h_flex().gap(6).items_center().children(parts) : null;

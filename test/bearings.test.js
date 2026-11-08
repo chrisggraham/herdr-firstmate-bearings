@@ -44,7 +44,7 @@ test("a backend note from the snapshot is not shown on a card", () => {
   const text = JSON.stringify({ schema: "fm-bearings.v1", in_flight: [{ id: "t", name: "Task", state: "unknown", repo: "a/b", doing: "backend target gone: x" }] });
   const [row] = readBearings(text).sections[0].rows;
   assert.equal(row.detail, "");
-  assert.deepEqual([row.repo, row.status], ["a/b", { text: "unknown", tone: "muted" }]);
+  assert.deepEqual([row.repo, row.status], ["a/b", undefined]);
 });
 
 test("empty sections are left out by default and kept when asked", () => {
@@ -159,4 +159,9 @@ test("a card's counts name the waiting decisions and the tasks in flight", () =>
   assert.equal(readBearings(snapshot({ decisions_open: open(3), in_flight: open(1) })).counts, "3 waiting · 1 in flight");
   assert.equal(readBearings(snapshot({ in_flight: open(2) })).counts, "2 in flight");
   assert.equal(readBearings(snapshot({})).counts, "");
+});
+
+test("a queued card with owner and reason both empty has no detail", () => {
+  const text = JSON.stringify({ schema: "fm-bearings.v1", gates: [{ title: "Task", owner: "(main)", reason: "-" }] });
+  assert.equal(readBearings(text).sections[0].rows[0].detail, "");
 });
