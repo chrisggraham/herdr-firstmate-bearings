@@ -10,6 +10,7 @@ import { parseTaskRecord } from "./toon.js";
 import { noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
+import { typedFields } from "./fields.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { withPanel } from "./panels.js";
@@ -25,7 +26,6 @@ const PICK_STORE = "picked";
 const COLLAPSED_STORE = "collapsed";
 const EXPANDED_STORE = "expanded";
 const SHOW_PARALLEL = 3;
-const FIELD_KEY_WIDTH = 96;
 const PILL_ALPHA = "26";
 const CHIP_HOVER_ALPHA = "40";
 
@@ -533,15 +533,27 @@ export default class FirstmateBearings extends View {
     const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
       .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top);
     const meta = this.metaLine(row, t);
-    const grid = open ? this.fieldGrid(card.fields, t) : [];
-    return view.when(Boolean(meta), (el) => el.child(meta)).children(grid)
-      .when(open, (el) => el.child(this.actionRow(section, row, id, discuss, t)));
+    const typed = open ? typedFields(card.fields, Date.now()) : null;
+    return view.when(Boolean(meta), (el) => el.child(meta)).children(open ? this.fieldRows(typed, t) : [])
+      .when(open, (el) => el.child(this.footerRow(section, row, id, typed.links, discuss, t)));
   }
 
-  // The icon row at the bottom of an opened card, right-aligned below a thin divider: the action buttons, then Discuss.
-  actionRow(section, row, id, discuss, t) {
+  // The one-line footer of an opened card below a thin divider: link chips on the left, the action buttons then Discuss on the right.
+  footerRow(section, row, id, links, discuss, t) {
+    const chips = links.map((link, i) => this.linkChip(link, `${id}-${i}`, t));
     const buttons = actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t));
-    return h_flex().gap(2).items_center().justify_end().mt(3).pt(6).border_t(1).border_color(t.border).children(buttons).child(discuss);
+    const actions = h_flex().gap(2).items_center().flex_none().children(buttons).child(discuss);
+    const linkRow = h_flex().flex_1().min_w(0).flex_wrap().gap(4).items_center().children(chips);
+    return h_flex().gap(6).items_center().mt(3).pt(6).border_t(1).border_color(t.border).child(linkRow).child(actions);
+  }
+
+  // A chip for a URL, like the PR chip: a pull request has the git-compare icon, any other link a link icon.
+  linkChip({ url, label, isPr }, id, t) {
+    const icon = isPr ? "mods/workspace-chrome/git-compare.svg" : "mods/firstmate-bearings/link.svg";
+    return h_flex().id(`link-${id}`).flex_none().max_w(200).h(18).px(6).gap(4).items_center().rounded(5).bg(t.accent + PILL_ALPHA)
+      .text_size(10.5).font_semibold().text_color(t.accent).cursor_pointer().hover((s) => s.bg(t.accent + CHIP_HOVER_ALPHA))
+      .tooltip(url).on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(url); })
+      .child(svg(icon).size(11).flex_none()).child(div().min_w(0).truncate().child(label));
   }
 
   // A small icon button like Discuss: muted icon, accent on hover, the plain action name as tooltip.
@@ -554,12 +566,28 @@ export default class FirstmateBearings extends View {
       .child(svg(`mods/firstmate-bearings/${sentNow ? "action-done.svg" : icon}`).size(13).flex_none());
   }
 
-  // Every field of an opened card as a two-column grid: a small uppercase dim key and a value, smaller and softer than the title, that wraps.
-  fieldGrid(fields, t) {
-    return fields.map(([key, value], i) => h_flex().gap(8).items_start().py(3)
-      .when(i > 0, (el) => el.border_t(1).border_color(t.border))
-      .child(div().w(FIELD_KEY_WIDTH).flex_none().text_size(10).font_semibold().text_color(t.dim).child(key.toUpperCase()))
-      .child(this.fieldValue(value, i, t)));
+  // The fields of an opened card by type: one wrapping row of light badges for short values, then each long text
+  // under a small muted label. Links are in the footer.
+  fieldRows({ badges, texts }, t) {
+    const row = badges.length > 0
+      ? [h_flex().flex_wrap().gap(4).py(3).children(badges.map((badge, i) => this.badge(badge, i, t)))]
+      : [];
+    return [...row, ...texts.map((text, i) => this.textField(text, i, t))];
+  }
+
+  // A small rounded badge with a subtle background: the key as a dim prefix, then the value. A date shows its full date as tooltip.
+  badge({ prefix, text, tip }, index, t) {
+    return h_flex().id(`badge-${index}`).h(18).px(6).gap(4).items_center().rounded(5).bg(t.hover).text_size(10.5)
+      .when(Boolean(tip), (el) => el.tooltip(tip))
+      .when(Boolean(prefix), (el) => el.child(div().text_color(t.dim).child(prefix)))
+      .child(div().text_color(t.muted).child(text));
+  }
+
+  // A long text: a small uppercase dim label above its value, which wraps.
+  textField({ label, value }, index, t) {
+    return v_flex().gap(1).py(3)
+      .child(div().text_size(10).font_semibold().text_color(t.dim).child(label.toUpperCase()))
+      .child(this.fieldValue(value, index, t));
   }
 
   // A field value: any http(s) URL in it is a link that opens in the browser; the rest is plain text.
