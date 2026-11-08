@@ -5,19 +5,23 @@ export const SCHEMA = "fm-bearings.v1";
 const list = (value) => (Array.isArray(value) ? value : []);
 const joinParts = (...parts) => parts.filter((part) => part && part !== "-").join(" · ");
 
+// The snapshot flags that list every decision and every landed item instead of a short list.
+export const REVEAL_FLAGS = ["--all-decisions", "--all-landed"];
+
 // Each row is a card: a title, a muted detail line, an optional muted `repo` label and status pill,
-// and the facts the card shows when opened. A PR row has `pr` (the chip) and `url` (where it opens).
+// and the fields (label and value pairs) the card shows when opened. A section with `hasTask: false`
+// holds items that are not tasks, so no task record exists for them. A PR row has `pr` (the chip) and `url` (where it opens).
 // `tone` names the theme color of a section's accent bar; a status tone names the color of its pill.
 const SECTIONS = [
-  { id: "decisions", title: "Waiting on you", tone: "blocked", highlight: true, reveal: "--all-decisions", items: (b) => list(b.decisions_open), row: decisionRow },
+  { id: "decisions", title: "Waiting on you", tone: "blocked", highlight: true, items: (b) => list(b.decisions_open), row: decisionRow },
   { id: "in-flight", title: "In flight", tone: "accent", items: (b) => list(b.in_flight), row: (t) => ({
     title: t.name ?? t.id ?? "", detail: shownDoing(t.doing) ?? "", repo: t.repo, status: statusOf(t.state),
     facts: facts({ Repo: t.repo, State: t.state, Doing: shownDoing(t.doing), Kind: t.kind, Id: t.id }) }) },
   { id: "prs", title: "PRs", tone: "ansi4", items: (b) => list(b.recorded_prs), row: prRow },
-  { id: "secondmates", title: "Secondmates", tone: "dim", items: (b) => list(b.secondmates), row: secondmateRow },
+  { id: "secondmates", title: "Secondmates", tone: "dim", hasTask: false, items: (b) => list(b.secondmates), row: secondmateRow },
   { id: "queued", title: "Queued", tone: "muted", items: (b) => list(b.gates), row: (g) => ({
     title: g.title ?? "", detail: joinParts(plainOwner(g.owner), g.reason), status: hasValue(g.blocked_by) ? statusOf("held") : undefined, facts: facts({ "Blocked by": g.blocked_by, Reason: g.reason, Owner: plainOwner(g.owner), Filed: g.filed }) }) },
-  { id: "landed", title: "Landed", tone: "done", reveal: "--all-landed", items: (b) => list(b.landed), row: (l) => ({
+  { id: "landed", title: "Landed", tone: "done", items: (b) => list(b.landed), row: (l) => ({
     title: l.what ?? "", detail: plainOwner(l.owner), status: statusOf("merged"), facts: facts({ Owner: plainOwner(l.owner), Artifact: l.artifact }) }) },
 ];
 
@@ -34,9 +38,10 @@ const MIN_TITLE_LENGTH = 20;
 function decisionTitle(summary) {
   const text = String(summary ?? "");
   const cut = text.lastIndexOf(": ");
-  const title = cut >= MIN_TITLE_LENGTH ? text.slice(0, cut) : text;
-  return title.replace(/^captain\b:?\s*/i, "");
+  return stripCaptain(cut >= MIN_TITLE_LENGTH ? text.slice(0, cut) : text);
 }
+
+const stripCaptain = (title) => String(title).replace(/^captain\b:?\s*/i, "");
 
 // The snapshot's verb "captain-hold" is internal; the pill says what the person has to do.
 function decisionStatus(decision) {
@@ -51,9 +56,24 @@ function decisionRow(decision) {
     facts: facts({ Question: decision.question, Key: decision.key, Owner: plainOwner(decision.owner) }) };
 }
 
-// "Label: value" lines for the values the snapshot gave. The snapshot writes "-" for no value.
+// [label, value] pairs for the values the snapshot gave. The snapshot writes "-" for no value.
 function facts(values) {
-  return Object.entries(values).filter(([, value]) => hasValue(value)).map(([label, value]) => `${label}: ${value}`);
+  return Object.entries(values).filter(([, value]) => hasValue(value));
+}
+
+const isEmptyField = (value) => !hasValue(value) || value === "none";
+const fieldKey = (label) => label.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// The title and fields an opened card shows. With a task record (from `fm-tasks-axi.sh show`),
+// the title is the record's full title and the fields are every record field, then the snapshot
+// fields the record does not already have. Fields with no value are left out.
+export function cardOf(row, record) {
+  const recordFields = Object.entries(record ?? {}).filter(([, value]) => typeof value === "string");
+  const shown = new Set(recordFields.map(([key]) => fieldKey(key)));
+  const snapshotFields = row.facts.filter(([label]) => !shown.has(fieldKey(label)));
+  const fields = [...recordFields, ...snapshotFields].filter(([, value]) => !isEmptyField(value));
+  const title = record?.title ? stripCaptain(record.title) : row.title;
+  return { title, fields };
 }
 
 // A "backend ..." note means the snapshot could not see the task's terminal. That check
@@ -97,20 +117,23 @@ export function readBearings(text, { hideEmpty = true } = {}) {
   const snapshot = JSON.parse(text);
   if (snapshot?.schema !== SCHEMA) return { unsupported: `Unsupported bearings version (got ${snapshot?.schema})`, sections: [], counts: "" };
 
-  const sections = SECTIONS.map(({ id, title, tone, highlight, reveal, items, row }) => {
+  const sections = SECTIONS.map(({ id, title, tone, highlight, items, row }) => {
     const rows = items(snapshot).map((item) => ({ ...row(item, snapshot), itemId: item.id }));
-    return { id, title, tone, count: rows.length, rows, highlighted: Boolean(highlight) && rows.length > 0,
-      revealFlag: reveal, hidden: hiddenCount(snapshot, reveal) };
+    return { id, title, tone, count: rows.length, rows, highlighted: Boolean(highlight) && rows.length > 0 };
   }).filter((section) => !hideEmpty || section.count > 0);
-  return { unsupported: null, sections, counts: countsLine(snapshot) };
+  return { unsupported: null, sections, counts: countsLine(snapshot), records: taskRecordKeys(snapshot) };
 }
 
-// How many items of a section the snapshot left out; 0 when it says none or gives no count.
-function hiddenCount(snapshot, flag) {
-  const omitted = list(snapshot.omitted).find((entry) => entry.reveal === flag);
-  if (!omitted) return 0;
-  const surface = String(omitted.surface);
-  const [, shown, total] = /showing (\d+) of (\d+)/.exec(surface) ?? [];
-  if (total) return total - shown;
-  return Number(/: (\d+)$/.exec(surface)?.[1] ?? 0);
+// One { id, signature } per task id in the snapshot. The signature changes when any snapshot
+// entry of that id changes, which is when its task record is fetched again.
+export function taskRecordKeys(snapshot) {
+  const entries = new Map();
+  for (const { id, items, hasTask } of SECTIONS) {
+    if (hasTask === false) continue;
+    for (const item of items(snapshot)) {
+      if (!item.id) continue;
+      entries.set(item.id, [...(entries.get(item.id) ?? []), { section: id, item }]);
+    }
+  }
+  return [...entries].map(([id, parts]) => ({ id, signature: JSON.stringify(parts) }));
 }
