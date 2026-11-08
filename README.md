@@ -5,9 +5,10 @@ Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the be
 ## Features
 
 - Lists the Firstmates open anywhere in Herdr, on this computer and on connected machines.
-- Shows one Firstmate's bearings in six sections: Waiting on you, In flight, PRs, Secondmates, Queued and Landed. Each section is collapsible and shows a count.
+- Shows one Firstmate's bearings in six sections: Waiting on you, In flight, PRs, Secondmates, Queued and Landed. Each section is collapsible and shows a count. Sections with nothing in them are hidden.
+- Each item is a card with a title (two lines at most) and a muted detail line. A left click opens the card in place to show the full title and every fact the snapshot has. Click again to close it.
 - Refreshes every 30 seconds. If a refresh fails, the last data stays, marked with its age, with one error line.
-- A click on a PR row opens the PR in your browser.
+- The PR link on an opened PR card opens the PR in your browser.
 - No dependencies and no build step.
 
 ## Install
@@ -25,6 +26,20 @@ The mod runs `bin/fm-bearings-snapshot.sh` from a Firstmate home on your machine
 3. With more than one Firstmate, click the name box at the top (it has a chevron) to go back to the list. With one Firstmate, the panel opens it directly and shows no box.
 
 The pick is shared by every tab and is kept across restarts. A Firstmate is found when one of its panes is open in its home folder. A Firstmate with only a worker tab open is not found.
+
+## Settings
+
+`mods/firstmate-bearings/config.json` holds the settings. It is read on every refresh.
+
+```json
+{ "hideEmptySections": true }
+```
+
+- `hideEmptySections` (default `true`): hide a section that has no items. Set it to `false` to show every section.
+
+## Errors
+
+Every error the mod catches is logged with its time, where it happened and a short message, in `firstmate-bearings.log` in the Herdr app folder (`~/.config/herdr-app/`, or `$HERDR_APP_HOME`). The log keeps the newest 200 lines. Each line also goes to the app's console output.
 
 ## Update
 
