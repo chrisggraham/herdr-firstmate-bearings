@@ -223,6 +223,7 @@ export default class FirstmateBearings extends View {
       .child(div().text_size(13).font_semibold().text_color(row.flagged ? t.blocked : t.foreground)
         .when(!open, (el) => el.max_h(36).overflow_hidden()).child(row.title));
     if (!open) return card.when(Boolean(row.detail), (el) => el.child(div().text_size(11.5).text_color(t.muted).truncate().child(row.detail)));
+    // The "Ask Firstmate" button goes at the end of this opened card, when the ask dialog lands on main.
     const lines = [row.detail, ...row.facts].filter(Boolean).map((text) => div().text_size(11.5).text_color(t.muted).child(text));
     return card.children(lines).when(Boolean(row.url), (el) => el.child(div().id(`link-${id}`).text_size(11.5).text_color(t.accent)
       .cursor_pointer().on_click((_e, cx) => cx.open_url(row.url)).child(row.url)));
