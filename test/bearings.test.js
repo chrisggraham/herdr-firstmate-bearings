@@ -202,3 +202,12 @@ test("the PR's repo and the snapshot repo come before the record repo", () => {
   assert.equal(repoOf({ pr: { repo: "o/pr" }, repo: "o/snap" }, { repo: "rec" }), "o/pr");
   assert.equal(repoOf({ repo: "o/snap" }, { repo: "rec" }), "o/snap");
 });
+
+test("every task section's card gets the repo from its task record", () => {
+  const text = JSON.stringify({ schema: "fm-bearings.v1",
+    decisions_open: [{ id: "d", summary: "A long enough title here: why", question: "q" }],
+    in_flight: [{ id: "f", name: "F" }], gates: [{ id: "g", title: "G" }], landed: [{ id: "l", what: "L" }] });
+  const sections = readBearings(text, { hideEmpty: false }).sections.filter((s) => s.count > 0);
+  assert.deepEqual(sections.map((s) => s.id), ["decisions", "in-flight", "queued", "landed"]);
+  for (const section of sections) assert.equal(repoOf(section.rows[0], { repo: "example-repo" }), "example-repo", section.id);
+});
