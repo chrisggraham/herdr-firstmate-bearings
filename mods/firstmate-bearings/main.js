@@ -80,7 +80,11 @@ export default class FirstmateBearings extends View {
   // Starts a fresh fetch when the shown Firstmate changes.
   follow(home, cx) {
     const key = home?.key ?? null;
-    if (key === this.shown) return;
+    // A remote machine that was not ready at the first fetch is tried again as soon as it is.
+    if (key === this.shown) {
+      if (home && !this.data && !this.error) this.fetch(cx);
+      return;
+    }
     this.shown = key;
     this.home = home;
     this.data = null;
