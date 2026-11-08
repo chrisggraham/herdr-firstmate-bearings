@@ -3,8 +3,8 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile } from "herdr";
-import { findCandidates, inboxPath, listHomes, scriptPath } from "./homes.js";
-import { readBearings } from "./bearings.js";
+import { awayPath, findCandidates, inboxPath, listHomes, needsCheck, scriptPath } from "./homes.js";
+import { isAwayRefusal, readBearings } from "./bearings.js";
 import { noteArgs, newRequestId } from "./ask.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
@@ -12,6 +12,7 @@ import { loadSet, saveSet, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
+const REPO_URL = "https://github.com/chrisggraham/herdr-firstmate-bearings";
 const PICK_STORE = "picked";
 const COLLAPSED_STORE = "collapsed";
 const EXPANDED_STORE = "expanded";
@@ -32,7 +33,11 @@ const firstLine = (text) => String(text).trim().split("\n")[0];
 export default class FirstmateBearings extends View {
   init(_props, cx) {
     if (props()?.ask) return this.initAsk(cx);
-    this.isHome = new Map();
+    this.checks = new Map();
+    this.counts = new Map();
+    this.away = false;
+    this.awayHomes = new Set();
+    this.homes = [];
     this.picked = localStorage.getItem(PICK_STORE);
     this.listOpen = false;
     // Kept in storage: the panel is built again when the person switches spaces and comes back.
@@ -43,7 +48,7 @@ export default class FirstmateBearings extends View {
     this.shown = null;
     this.running = null;
     this.reveal = [];
-    cx.timer.every(FETCH_EVERY_MS, (cx) => this.fetch(cx));
+    cx.timer.every(FETCH_EVERY_MS, (cx) => { this.fetch(cx); this.checkAway(cx); });
     cx.timer.every(CLOCK_EVERY_MS, (cx) => cx.notify());
   }
 
@@ -58,14 +63,32 @@ export default class FirstmateBearings extends View {
     }).catch(() => {});
   }
 
-  // Finds out which candidate folders are Firstmate homes; each pair is checked once.
+  // Finds out which candidate folders are Firstmate homes. A folder that is not a home is checked
+  // again after each fetch interval, because it may become one; a home is not checked again.
   discover(candidates, cx) {
+    const now = Date.now();
     for (const candidate of candidates) {
-      if (this.isHome.has(candidate.key) || !machineReady(candidate.machine)) continue;
-      this.isHome.set(candidate.key, false);
+      if (!needsCheck(this.checks, candidate.key, now, FETCH_EVERY_MS) || !machineReady(candidate.machine)) continue;
+      this.checks.set(candidate.key, { found: false, at: now });
       cx.spawn(async (cx) => {
         const found = await this.hasScript(candidate);
-        this.isHome.set(candidate.key, found);
+        this.checks.set(candidate.key, { found, at: now });
+        cx.notify();
+      });
+    }
+  }
+
+  // One cheap test per Firstmate: its state/.afk file exists while it is in away mode.
+  checkAway(cx) {
+    for (const home of this.homes) {
+      if (!machineReady(home.machine)) continue;
+      cx.spawn(async (cx) => {
+        try {
+          const result = await exec("test", ["-e", awayPath(home)], { on: home.machine });
+          if (result.code === 0) this.awayHomes.add(home.key); else this.awayHomes.delete(home.key);
+        } catch (e) {
+          this.logError("away", e);
+        }
         cx.notify();
       });
     }
@@ -99,6 +122,7 @@ export default class FirstmateBearings extends View {
     this.home = home;
     this.data = null;
     this.error = null;
+    this.away = false;
     this.updated = null;
     this.reveal = [];
     this.capped.clear();
@@ -121,12 +145,19 @@ export default class FirstmateBearings extends View {
       try {
         const config = readConfig(await readTextFile(`${appHome()}/mods/firstmate-bearings/config.json`).catch(() => null));
         const result = await exec(scriptPath(home), ["--json", ...this.reveal], { on: home.machine });
+        if (isAwayRefusal(result.code, result.stderr)) {
+          this.awayHomes.add(home.key);
+          if (this.home?.key === home.key) Object.assign(this, { away: true, error: null });
+          return;
+        }
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
         const bearings = readBearings(result.stdout, { hideEmpty: config.hideEmptySections });
         if (this.home?.key === home.key && this.reveal === reveal) {
           this.rememberCapped(bearings, reveal);
-          Object.assign(this, { data: bearings, error: null, updated: Date.now() });
+          Object.assign(this, { data: bearings, error: null, away: false, updated: Date.now() });
+          this.awayHomes.delete(home.key);
         }
+        this.counts.set(home.key, bearings.counts);
       } catch (e) {
         this.logError("fetch", e);
         if (this.home?.key === home.key) this.error = firstLine(e.message ?? e);
@@ -235,41 +266,70 @@ export default class FirstmateBearings extends View {
     const t = theme();
     const candidates = findCandidates(spaces(), panes());
     this.discover(candidates, cx);
-    const homes = listHomes(candidates, this.isHome);
+    const homes = listHomes(candidates, this.checks);
+    const keys = (list) => list.map((h) => h.key).join("|");
+    const changed = keys(homes) !== keys(this.homes);
+    this.homes = homes;
+    if (changed) this.checkAway(cx);
     const home = this.currentHome(homes);
     this.follow(home, cx);
 
-    const body = home ? this.bearingsView(home, homes, t) : this.listView(homes, t);
+    const body = home ? this.bearingsView(home, t) : this.listView(homes, t);
     return v_flex().id("firstmate-bearings").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background)
       .border_1().border_color(t.border).text_color(t.foreground).text_size(13).child(body);
   }
 
+  // The first page: the mod's icon, what it is, the repo link and one card per Firstmate.
   listView(homes, t) {
-    const rows = homes.map((home) => h_flex().id(`home-${home.key}`).h(30).flex_none().px(14).items_center().cursor_pointer()
-      .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.pick(home, cx)).child(div().flex_1().min_w(0).truncate().child(home.name)));
-    const empty = div().p(14).text_size(12).text_color(t.dim).child("No Firstmate is open in any tab");
+    const link = div().id("repo-link").text_size(12).text_color(t.accent).cursor_pointer().hover((s) => s.opacity(0.8))
+      .on_click((_e, cx) => cx.open_url(REPO_URL)).child("github.com/chrisggraham/herdr-firstmate-bearings");
+    const intro = v_flex().flex_none().px(14).py(12).gap(6)
+      .child(h_flex().gap(8).items_center().child(svg("mods/firstmate-bearings/icon.svg").size(18).flex_none().text_color(t.accent))
+        .child(div().font_semibold().child("Firstmate Bearings")))
+      .child(div().text_size(12).text_color(t.muted).child("Shows what each Firstmate is waiting on and working on."))
+      .child(link);
+    const cards = homes.map((home) => this.homeCard(home, t));
+    const empty = div().px(14).text_size(12).text_color(t.dim).child("No Firstmate is open in any tab");
     return v_flex().flex_1().min_h(0)
-      .child(h_flex().h(42).flex_none().px(14).items_center().font_semibold().border_b(1).border_color(t.border).child("Firstmates"))
-      .child(v_flex().id("firstmate-list").flex_1().min_h(0).overflow_y_scrollbar().py(6).children(rows).when(rows.length === 0, (el) => el.child(empty)));
+      .child(v_flex().id("firstmate-list").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
+        .child(intro).children(cards).when(cards.length === 0, (el) => el.child(empty)));
   }
 
-  bearingsView(home, homes, t) {
+  // A card for one Firstmate: its name, its machine and short counts when a fetch has shown them.
+  homeCard(home, t) {
+    const counts = this.counts.get(home.key);
+    return v_flex().id(`home-${home.key}`).flex_none().mx(10).mt(6).px(10).py(8).gap(3).rounded(8)
+      .bg(t.raised).border_l(3).border_color(t.accent).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => this.pick(home, cx))
+      .child(h_flex().gap(8).items_center().child(div().flex_1().min_w(0).truncate().font_semibold().child(home.name))
+        .when(this.awayHomes.has(home.key), (el) => el.child(this.pill("☾ away", t.muted, t.hover))))
+      .when(Boolean(home.machine), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(home.machine)))
+      .when(Boolean(counts), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(counts)));
+  }
+
+  bearingsView(home, t) {
+    const back = h_flex().id("firstmate-back").size(26).flex_none().items_center().justify_center().rounded(6)
+      .text_size(18).text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => { this.listOpen = true; cx.notify(); }).child("‹");
     const name = div().min_w(0).truncate().font_bold().child(home.name);
-    // With several Firstmates the name is a select box: a chevron shows that it opens the list.
-    const title = homes.length > 1
-      ? h_flex().id("firstmate-switcher").min_w(0).h(28).px(8).gap(6).items_center().rounded(6).border_1().border_color(t.border)
-        .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { this.listOpen = true; cx.notify(); })
-        .child(name).child(svg("mods/workspace-chrome/chevron-down.svg").size(12).flex_none().text_color(t.dim))
-      : name;
     const machine = div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.muted).child(home.machine ?? "");
     const updated = this.updated ? `updated ${ago(this.updated)}` : "loading…";
-    const switcher = h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-      .child(title).child(machine)
+    const header = h_flex().h(42).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
+      .child(back).child(name).child(machine)
       .child(this.pill(updated, t.muted, t.hover))
       .child(this.refreshButton(t));
-    return v_flex().flex_1().min_h(0).child(switcher)
+    return v_flex().flex_1().min_h(0).child(header)
       .child(v_flex().id("firstmate-sections").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
-        .children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
+        .children(this.awayLines(home, t)).children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
+  }
+
+  // A calm card while the Firstmate is in away mode. Data from before stays under it.
+  awayLines(home, t) {
+    if (!this.away) return [];
+    const stale = this.updated ? `Showing data from ${ago(this.updated)}.` : "";
+    return [v_flex().flex_none().mx(10).mt(8).px(10).py(8).gap(3).rounded(8).bg(t.raised)
+      .child(div().text_size(12.5).font_medium().child(`${home.name} is in away mode. Bearings shows again after it returns.`))
+      .when(Boolean(stale), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(stale)))];
   }
 
   // A small rounded label: text in a color on a faint tint of the same color.

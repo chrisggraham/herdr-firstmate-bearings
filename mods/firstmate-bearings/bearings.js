@@ -81,18 +81,28 @@ function secondmateRow(secondmate) {
   };
 }
 
+// The snapshot command refuses while the Firstmate is in away mode. That is not a failure of the panel.
+export const isAwayRefusal = (code, stderr) => code !== 0 && /away mode is still active/.test(String(stderr));
+
+// "3 waiting · 1 in flight": short counts for a Firstmate card; empty when both are zero.
+export function countsLine(snapshot) {
+  const waiting = list(snapshot?.decisions_open).length;
+  const inFlight = list(snapshot?.in_flight).length;
+  return joinParts(waiting > 0 && `${waiting} waiting`, inFlight > 0 && `${inFlight} in flight`);
+}
+
 // Throws on text that is not JSON; the caller shows that as a failed refresh.
 // With hideEmpty, a section with no rows is left out.
 export function readBearings(text, { hideEmpty = true } = {}) {
   const snapshot = JSON.parse(text);
-  if (snapshot?.schema !== SCHEMA) return { unsupported: `Unsupported bearings version (got ${snapshot?.schema})`, sections: [] };
+  if (snapshot?.schema !== SCHEMA) return { unsupported: `Unsupported bearings version (got ${snapshot?.schema})`, sections: [], counts: "" };
 
   const sections = SECTIONS.map(({ id, title, tone, highlight, reveal, items, row }) => {
     const rows = items(snapshot).map((item) => ({ ...row(item, snapshot), itemId: item.id }));
     return { id, title, tone, count: rows.length, rows, highlighted: Boolean(highlight) && rows.length > 0,
       revealFlag: reveal, hidden: hiddenCount(snapshot, reveal) };
   }).filter((section) => !hideEmpty || section.count > 0);
-  return { unsupported: null, sections };
+  return { unsupported: null, sections, counts: countsLine(snapshot) };
 }
 
 // How many items of a section the snapshot left out; 0 when it says none or gives no count.

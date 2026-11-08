@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { readBearings } from "../mods/firstmate-bearings/bearings.js";
+import { isAwayRefusal, readBearings } from "../mods/firstmate-bearings/bearings.js";
 
 const fixture = readFileSync(new URL("./fixtures/bearings.json", import.meta.url), "utf8");
 const countsOf = (bearings) => Object.fromEntries(bearings.sections.map((s) => [s.id, s.count]));
@@ -144,4 +144,19 @@ test("every row carries its item id for the Ask dialog", () => {
   const sections = readBearings(fixture).sections;
   assert.deepEqual(sections.map((s) => s.rows.map((r) => r.itemId)),
     [["d-1"], ["t-1", "t-2"], ["t-1"], ["sm-a", "sm-b"], ["g-1", "g-2"], ["t-0"]]);
+});
+
+test("the away-mode refusal is told from other failures", () => {
+  const stderr = "fm-afk-return: away mode is still active; run bin/fm-afk-return.sh before ordinary captain work\n";
+  assert.equal(isAwayRefusal(3, stderr), true);
+  assert.equal(isAwayRefusal(0, stderr), false);
+  assert.equal(isAwayRefusal(1, "jq: parse error"), false);
+});
+
+test("a card's counts name the waiting decisions and the tasks in flight", () => {
+  const snapshot = (extra) => JSON.stringify({ schema: "fm-bearings.v1", ...extra });
+  const open = (n) => Array.from({ length: n }, (_, i) => ({ key: `k${i}` }));
+  assert.equal(readBearings(snapshot({ decisions_open: open(3), in_flight: open(1) })).counts, "3 waiting · 1 in flight");
+  assert.equal(readBearings(snapshot({ in_flight: open(2) })).counts, "2 in flight");
+  assert.equal(readBearings(snapshot({})).counts, "");
 });

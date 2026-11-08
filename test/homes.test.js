@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findCandidates, homeKey, homeName, listHomes, scriptPath } from "../mods/firstmate-bearings/homes.js";
+import { findCandidates, homeKey, homeName, listHomes, awayPath, needsCheck, scriptPath } from "../mods/firstmate-bearings/homes.js";
 
 // Two spaces on this computer (one named) and one unnamed space on machine "build-box".
 const spaces = [
@@ -29,7 +29,7 @@ test("empty folders, mod panes and panes outside any space are skipped", () => {
 
 test("a folder without the script is not a home", () => {
   const candidates = findCandidates(spaces, [pane("t1", "/work/crew"), pane("t3", "/work/plain")]);
-  const isHome = new Map([[homeKey(null, "/work/crew"), true], [homeKey(null, "/work/plain"), false]]);
+  const isHome = new Map([[homeKey(null, "/work/crew"), { found: true, at: 0 }], [homeKey(null, "/work/plain"), { found: false, at: 0 }]]);
   assert.deepEqual(listHomes(candidates, isHome).map((h) => h.folder), ["/work/crew"]);
 });
 
@@ -43,10 +43,22 @@ test("the name is the space name when named, else the folder name", () => {
   assert.equal(homeName({ named: false, spaceName: "alpha", folder: "/work/other/", machine: null }), "other");
 });
 
-test("a remote name includes the machine", () => {
-  assert.equal(homeName({ named: true, spaceName: "crew", folder: "/work/crew", machine: "build-box" }), "crew · build-box");
+test("a remote name is the same as a local name; the machine is shown apart", () => {
+  assert.equal(homeName({ named: true, spaceName: "crew", folder: "/work/crew", machine: "build-box" }), "crew");
+});
+
+test("a folder is checked once, and a non-home again after the interval", () => {
+  const checks = new Map([["home", { found: true, at: 0 }], ["plain", { found: false, at: 1000 }]]);
+  assert.equal(needsCheck(checks, "new", 1000, 30000), true);
+  assert.equal(needsCheck(checks, "home", 999999, 30000), false);
+  assert.equal(needsCheck(checks, "plain", 30999, 30000), false);
+  assert.equal(needsCheck(checks, "plain", 31000, 30000), true);
 });
 
 test("the script path joins the folder and the script", () => {
   assert.equal(scriptPath({ folder: "/work/crew/" }), "/work/crew/bin/fm-bearings-snapshot.sh");
+});
+
+test("the away marker is the .afk file in the state folder", () => {
+  assert.equal(awayPath({ folder: "/work/crew/" }), "/work/crew/state/.afk");
 });
