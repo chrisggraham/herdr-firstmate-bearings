@@ -12,8 +12,19 @@ const MAX_BADGE_LENGTH = 40;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+// Text labels that read better than the raw key. Any other key shows as its words with a capital first letter.
+const LABEL_NAMES = { body: "Description" };
+
 const keyOf = (label) => label.toLowerCase().replace(/[^a-z0-9]/g, "");
 const prefixOf = (label) => label.toLowerCase().replace(/[_-]/g, " ");
+
+// "Description" for the key "body"; "Hold reason" for "hold_reason".
+export function labelOf(label) {
+  const named = LABEL_NAMES[keyOf(label)];
+  if (named) return named;
+  const words = prefixOf(label);
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 // "3d ago", "today" or "in 9d" for a YYYY-MM-DD date, by whole days from the clock's day (UTC).
 // Text that is not a date gives "".

@@ -10,7 +10,7 @@ import { parseTaskRecord } from "./toon.js";
 import { discussLabel, noteArgs, newRequestId, toFirstmate, isSendKey, SENT_SHARED_KEY } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
-import { typedFields } from "./fields.js";
+import { labelOf, typedFields } from "./fields.js";
 import { readConfig } from "./config.js";
 import { DEMO_HOME, demoBearings } from "./demo.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
@@ -549,7 +549,7 @@ export default class FirstmateBearings extends View {
   }
 
   // A card has a bar in its section's color and two lines. Line 1 is the title (one line cut to the width, wrapped in full when opened)
-  // and the status pill or PR chip; a click on it opens or closes the card. Line 2 is the repo and the PR chip on the left
+  // and the status pill; a click on it opens or closes the card. Line 2 is the repo and the PR chip on the left
   // and the action buttons on the right; a click on it only runs an action. The opened part below holds the badges, the detail,
   // the long texts and the other link chips.
   rowView(section, row, index, t) {
@@ -558,13 +558,12 @@ export default class FirstmateBearings extends View {
     const entry = this.records.get(this.home.key)?.get(row.itemId);
     const card = cardOf(row, entry?.record);
     const typed = typedFields(card.fields, Date.now());
-    const prLink = row.pr ? undefined : typed.links.find((link) => link.isPr);
-    const otherLinks = typed.links.filter((link) => link !== prLink);
+    const prLink = row.pr ? { url: row.url, label: row.pr.label, isPr: true } : typed.links.find((link) => link.isPr);
+    const otherLinks = typed.links.filter((link) => link !== prLink && link.url !== row.url);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
       .when(!open, (el) => el.truncate()).child(card.title);
     const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
-      .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
-      .when(Boolean(row.pr), (el) => el.child(this.prChip(row, t)));
+      .child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)));
     const view = v_flex().flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
       .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).child(top).child(this.secondLine(section, row, id, repoOf(row, entry?.record), prLink, t));
     return view.children(open ? this.openedRows(row, typed, otherLinks, entry, id, t) : []);
@@ -641,7 +640,7 @@ export default class FirstmateBearings extends View {
   // A long text: a small uppercase dim label above its value, which wraps.
   textField({ label, value }, index, t) {
     return v_flex().gap(1).py(3)
-      .child(div().text_size(10).font_semibold().text_color(t.dim).child(label.toUpperCase()))
+      .child(div().text_size(10).font_semibold().text_color(t.dim).child(labelOf(label).toUpperCase()))
       .child(this.fieldValue(value, index, t));
   }
 
@@ -654,13 +653,5 @@ export default class FirstmateBearings extends View {
       ? div().id(`url-${index}-${i}`).text_color(t.accent).cursor_pointer().hover((el) => el.opacity(0.7))
           .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(s.url); }).child(s.text)
       : div().child(s.text)));
-  }
-
-  // A chip like "PR #12" in the accent color: it opens the PR and changes color under the pointer.
-  prChip(row, t) {
-    const icon = svg("mods/workspace-chrome/git-compare.svg").size(11).flex_none();
-    return h_flex().id(`pr-${row.itemId}`).flex_none().h(18).px(6).gap(4).items_center().rounded(5).bg(t.accent + PILL_ALPHA)
-      .text_size(10.5).font_semibold().text_color(t.accent).cursor_pointer().hover((s) => s.bg(t.accent + CHIP_HOVER_ALPHA))
-      .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(row.url); }).child(icon).child(row.pr.label);
   }
 }
