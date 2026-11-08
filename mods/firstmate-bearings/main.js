@@ -397,7 +397,7 @@ export default class FirstmateBearings extends View {
 
   // A dialog button: the primary one is filled, the other has an outline.
   dialogButton(t, id, text, primary, run) {
-    return h_flex().id(id).h(32).px(14).items_center().rounded(8)
+    return h_flex().id(id).h(32).px(14).flex_none().items_center().rounded(8)
       .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
       .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
       .hover((s) => s.opacity(0.88)).on_click(run).child(text);
@@ -413,9 +413,9 @@ export default class FirstmateBearings extends View {
       .child(Textarea.new(this.input).h(96).px(10).py(8).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
       .children([this.failureLine(t)].filter(Boolean))
       .child(h_flex().pt(20).gap(8).items_center()
-        .child(div().flex_1().text_size(11).text_color(t.dim).child("Enter adds a line. Cmd or Ctrl+Enter sends."))
+        .child(div().flex_1().min_w(0).text_size(11).text_color(t.dim).child("Enter adds a line. Cmd or Ctrl+Enter sends."))
         .child(this.dialogButton(t, "ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
-        .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : discussLabel(this.ask.homeName), true, (_e, cx) => this.send(cx))));
+        .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
   }
 
   render(cx) {
