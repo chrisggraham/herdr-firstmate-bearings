@@ -1,4 +1,4 @@
-// Builds the note the "Ask Firstmate" dialog sends. Pure: no Herdr calls.
+// Builds the note the Discuss dialog sends. Pure: no Herdr calls.
 // The note holds the section and the item id, never the row's text: row text can come from worker output.
 
 export const MAX_ID_LENGTH = 64;

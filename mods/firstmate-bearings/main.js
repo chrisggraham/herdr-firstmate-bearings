@@ -228,7 +228,7 @@ export default class FirstmateBearings extends View {
     this.handle = cx.focus_handle();
   }
 
-  // The way in for the panel: call this from the "Ask Firstmate" button of an expanded card.
+  // The way in for the panel: call this from the discuss button of an expanded card.
   openAskDialog(sectionId, itemId) {
     const home = this.home;
     const ask = { machine: home.machine, folder: home.folder, homeName: home.name, sectionId, itemId };
@@ -266,7 +266,7 @@ export default class FirstmateBearings extends View {
       .hover((s) => s.opacity(0.88)).on_click(action).child(text);
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Ask ${this.ask.homeName} about this`))
+      .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Discuss with ${this.ask.homeName}`))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
       .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
@@ -362,7 +362,7 @@ export default class FirstmateBearings extends View {
     const icon = busy ? svg("mods/workspace-chrome/spinner.svg").spin(900) : svg("mods/firstmate-bearings/refresh.svg");
     return h_flex().id("firstmate-refresh").size(26).flex_none().items_center().justify_center().rounded(6)
       .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.refresh(cx))
-      .child(icon.size(14).text_color(busy ? t.working : t.foreground));
+      .child(icon.size(14).flex_none().text_color(busy ? t.working : t.foreground));
   }
 
   errorLines(t) {
@@ -385,8 +385,8 @@ export default class FirstmateBearings extends View {
   sectionView(section, t, first) {
     const open = !this.collapsed.has(section.id);
     const accent = t[section.tone] ?? t.muted;
-    const header = h_flex().id(`section-${section.id}`).h(36).flex_none().mx(12).mt(first ? 4 : 14).gap(7).items_center()
-      .when(!first, (el) => el.border_t(1).border_color(t.border).pt(10))
+    const header = h_flex().id(`section-${section.id}`).h(36).flex_none().mx(12).mt(14).pt(10).gap(7).items_center()
+      .when(!first, (el) => el.border_t(1).border_color(t.border))
       .cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.toggle(section.id, cx))
       .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(13).flex_none().text_color(accent))
       .child(div().flex_1().min_w(0).truncate().text_size(14).font_bold().text_color(accent).child(section.title))
@@ -404,25 +404,26 @@ export default class FirstmateBearings extends View {
     const card = cardOf(row, record);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
       .child(card.title);
-    const top = h_flex().gap(8).items_start().child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)));
+    const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
+      .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
+      .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
+      .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
+    const top = h_flex().gap(8).items_start().child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
+      .when(open, (el) => el.child(discuss));
     const view = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
       .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => this.toggleCard(id, cx)).child(top);
     const meta = this.metaLine(row, t);
     const grid = open ? this.fieldGrid(card.fields, t) : [];
-    const ask = h_flex().id(`ask-${id}`).mt(4).h(26).px(10).gap(6).items_center().justify_center().rounded(6)
-      .bg(t.accent + PILL_ALPHA).text_size(12).font_semibold().text_color(t.accent).cursor_pointer()
-      .hover((s) => s.bg(t.accent + CHIP_HOVER_ALPHA))
-      .on_click(() => this.openAskDialog(section.id, row.itemId))
-      .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none()).child("Ask Firstmate");
-    return view.when(Boolean(meta), (el) => el.child(meta)).children(grid).when(open, (el) => el.child(ask));
+    return view.when(Boolean(meta), (el) => el.child(meta)).children(grid);
   }
 
-  // Every field of an opened card as a two-column grid: a small muted key and a value that wraps.
+  // Every field of an opened card as a two-column grid: a small uppercase muted key and a value that wraps.
   fieldGrid(fields, t) {
-    return fields.map(([key, value]) => h_flex().gap(8).items_start()
-      .child(div().w(FIELD_KEY_WIDTH).flex_none().text_size(10.5).text_color(t.dim).child(key))
-      .child(div().flex_1().min_w(0).text_size(11.5).text_color(t.muted).child(value)));
+    return fields.map(([key, value], i) => h_flex().gap(8).items_start().py(3)
+      .when(i > 0, (el) => el.border_t(1).border_color(t.border))
+      .child(div().w(FIELD_KEY_WIDTH).flex_none().text_size(10).font_semibold().text_color(t.dim).child(key.toUpperCase()))
+      .child(div().flex_1().min_w(0).text_size(12).text_color(t.foreground).child(value)));
   }
 
   // The muted repo label and detail, then the PR chip when the card has one.
