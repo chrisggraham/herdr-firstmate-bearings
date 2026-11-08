@@ -36,10 +36,22 @@ The pick is shared by every tab and is kept across restarts. A Firstmate is foun
 `mods/firstmate-bearings/config.json` holds the settings. It is read on every refresh.
 
 ```json
-{ "hideEmptySections": true }
+{ "hideEmptySections": true, "demo": false }
 ```
 
 - `hideEmptySections` (default `true`): hide a section that has no items. Set it to `false` to show every section.
+- `demo` (default `false`): show a built-in sample Firstmate instead of the real ones. See Demo mode.
+
+## Demo mode
+
+Demo mode shows invented data, so a screenshot never shows real projects. It is for taking a screenshot of the panel.
+
+1. Set `"demo": true` in `mods/firstmate-bearings/config.json`. The panel picks it up within a few seconds.
+2. The panel lists one Firstmate named `demo` on the host `example`. Open it: it has a few sample projects and tasks in every section.
+3. Take the screenshot.
+4. Set `"demo": false` again.
+
+In demo mode the panel runs no command and writes no log line. The Discuss and action buttons look and work as usual, including the check after a send, but send nothing. Refresh only draws the sample data again. The sample data is in `mods/firstmate-bearings/demo.js`.
 
 ## Errors
 
