@@ -8,10 +8,16 @@ import { readBearings } from "./bearings.js";
 import { noteArgs, newRequestId } from "./ask.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
+import { loadSet, saveSet, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
 const PICK_STORE = "picked";
+const COLLAPSED_STORE = "collapsed";
+const EXPANDED_STORE = "expanded";
+const TITLE_MAX_HEIGHT = 36;
+const PILL_ALPHA = "26";
+const CHIP_HOVER_ALPHA = "40";
 
 const ago = (ms) => {
   const seconds = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -29,8 +35,10 @@ export default class FirstmateBearings extends View {
     this.isHome = new Map();
     this.picked = localStorage.getItem(PICK_STORE);
     this.listOpen = false;
-    this.collapsed = new Set();
-    this.expanded = new Set();
+    // Kept in storage: the panel is built again when the person switches spaces and comes back.
+    this.collapsed = loadSet(localStorage, COLLAPSED_STORE);
+    this.expanded = loadSet(localStorage, EXPANDED_STORE);
+    this.capped = new Map();
     this.logging = Promise.resolve();
     this.shown = null;
     this.running = null;
@@ -93,6 +101,7 @@ export default class FirstmateBearings extends View {
     this.error = null;
     this.updated = null;
     this.reveal = [];
+    this.capped.clear();
     if (home) this.fetch(cx);
   }
 
@@ -114,7 +123,10 @@ export default class FirstmateBearings extends View {
         const result = await exec(scriptPath(home), ["--json", ...this.reveal], { on: home.machine });
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
         const bearings = readBearings(result.stdout, { hideEmpty: config.hideEmptySections });
-        if (this.home?.key === home.key && this.reveal === reveal) Object.assign(this, { data: bearings, error: null, updated: Date.now() });
+        if (this.home?.key === home.key && this.reveal === reveal) {
+          this.rememberCapped(bearings, reveal);
+          Object.assign(this, { data: bearings, error: null, updated: Date.now() });
+        }
       } catch (e) {
         this.logError("fetch", e);
         if (this.home?.key === home.key) this.error = firstLine(e.message ?? e);
@@ -125,14 +137,35 @@ export default class FirstmateBearings extends View {
     });
   }
 
-  setReveal(flags, cx) {
-    this.reveal = flags;
+  // The row count of each section as the snapshot caps it, so "Show fewer" appears only after more rows came.
+  rememberCapped(bearings, reveal) {
+    for (const section of bearings.sections) {
+      if (!reveal.includes(section.revealFlag)) this.capped.set(section.id, section.count);
+    }
+  }
+
+  // Shows or hides the rows a section's flag adds; the other sections keep their state.
+  setReveal(flag, show, cx) {
+    this.reveal = show ? [...this.reveal, flag] : this.reveal.filter((f) => f !== flag);
     this.running = null;
     this.fetch(cx);
   }
 
   toggle(id, cx) {
-    if (!this.collapsed.delete(id)) this.collapsed.add(id);
+    toggleId(this.collapsed, id);
+    saveSet(localStorage, COLLAPSED_STORE, this.collapsed);
+    cx.notify();
+  }
+
+  toggleCard(id, cx) {
+    toggleId(this.expanded, id);
+    saveSet(localStorage, EXPANDED_STORE, this.expanded);
+    cx.notify();
+  }
+
+  // A click on the refresh button fetches at once; a fetch that is running ignores it.
+  refresh(cx) {
+    this.fetch(cx);
     cx.notify();
   }
 
@@ -221,19 +254,41 @@ export default class FirstmateBearings extends View {
   }
 
   bearingsView(home, homes, t) {
-    const name = div().flex_1().min_w(0).truncate().font_semibold().child(home.name);
+    const name = div().min_w(0).truncate().font_bold().child(home.name);
     // With several Firstmates the name is a select box: a chevron shows that it opens the list.
     const title = homes.length > 1
-      ? h_flex().id("firstmate-switcher").flex_1().min_w(0).h(28).px(8).gap(6).items_center().rounded(6).border_1().border_color(t.border)
+      ? h_flex().id("firstmate-switcher").min_w(0).h(28).px(8).gap(6).items_center().rounded(6).border_1().border_color(t.border)
         .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { this.listOpen = true; cx.notify(); })
         .child(name).child(svg("mods/workspace-chrome/chevron-down.svg").size(12).flex_none().text_color(t.dim))
       : name;
+    const machine = div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.muted).child(home.machine ?? "");
+    const updated = this.updated ? `updated ${ago(this.updated)}` : "loading…";
     const switcher = h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-      .child(title)
-      .child(div().flex_none().text_size(11).text_color(t.dim).child(this.updated ? `updated ${ago(this.updated)}` : "loading…"));
+      .child(title).child(machine)
+      .child(this.pill(updated, t.muted, t.hover))
+      .child(this.refreshButton(t));
     return v_flex().flex_1().min_h(0).child(switcher)
       .child(v_flex().id("firstmate-sections").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
         .children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
+  }
+
+  // A small rounded label: text in a color on a faint tint of the same color.
+  pill(text, color, background) {
+    return div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(background).text_size(10.5).font_semibold().text_color(color).child(text);
+  }
+
+  statusPill(status, t) {
+    const color = t[status.tone] ?? t.muted;
+    return this.pill(status.text, color, color + PILL_ALPHA);
+  }
+
+  // The spinner shows while a fetch runs.
+  refreshButton(t) {
+    const busy = this.running !== null;
+    const icon = busy ? svg("mods/workspace-chrome/spinner.svg").spin(900) : svg("mods/firstmate-bearings/refresh.svg");
+    return h_flex().id("firstmate-refresh").size(26).flex_none().items_center().justify_center().rounded(6)
+      .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.refresh(cx))
+      .child(icon.size(13).text_color(busy ? t.working : t.muted));
   }
 
   errorLines(t) {
@@ -248,19 +303,19 @@ export default class FirstmateBearings extends View {
   }
 
   sectionViews(t) {
-    const sections = (this.data?.sections ?? []).map((section) => this.sectionView(section, t));
-    return [...sections, ...this.revealControl(t)];
+    return (this.data?.sections ?? []).map((section) => this.sectionView(section, t));
   }
 
-  // "Show N more" fetches the full lists; "Show fewer" goes back to the short ones.
-  revealControl(t) {
-    const hidden = this.data?.hidden;
-    const showing = this.reveal.length > 0;
-    if (!hidden && !showing) return [];
-    const label = showing ? "Show fewer" : hidden.count > 0 ? `Show ${hidden.count} more` : "Show more";
-    return [div().id("firstmate-reveal").mx(10).mt(8).h(28).flex_none().flex().items_center().justify_center().rounded(6)
+  // "Show N more" fetches the full list of one section; "Show fewer" goes back to the short list.
+  // Neither shows when there is nothing more or fewer to show.
+  revealControl(section, t) {
+    const showing = this.reveal.includes(section.revealFlag);
+    const longer = section.count > (this.capped.get(section.id) ?? Infinity);
+    if (showing ? !longer : section.hidden === 0) return [];
+    const label = showing ? "Show fewer" : `Show ${section.hidden} more`;
+    return [div().id(`reveal-${section.id}`).mx(10).mt(6).h(26).flex_none().flex().items_center().justify_center().rounded(6)
       .border_1().border_color(t.border).text_size(12).text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => this.setReveal(showing ? [] : hidden.flags, cx)).child(label)];
+      .on_click((_e, cx) => this.setReveal(section.revealFlag, !showing, cx)).child(label)];
   }
 
   sectionView(section, t) {
@@ -272,27 +327,46 @@ export default class FirstmateBearings extends View {
       .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(alert ? t.blocked : t.foreground).child(section.title))
       .child(div().px(7).h(18).flex().items_center().rounded(9).bg(t.hover).text_size(11).text_color(alert ? t.blocked : t.muted)
         .child(String(section.count)));
-    const rows = open ? section.rows.map((row, i) => this.rowView(section.id, row, i, t)) : [];
-    return v_flex().flex_none().child(header).children(rows);
+    const rows = open ? section.rows.map((row, i) => this.rowView(section, row, i, t)) : [];
+    return v_flex().flex_none().child(header).children(rows).children(open ? this.revealControl(section, t) : []);
   }
 
-  // A card shows its title (up to two lines) and a muted detail line. A left click opens it
-  // to the full title and every fact; the PR link on an opened card opens the PR.
-  rowView(sectionId, row, index, t) {
-    const id = `${sectionId}-${index}-${row.title}`;
+  // A card has a bar in its section's color, its title (up to two lines), a status pill and a muted
+  // line with the repo and detail. A left click opens it to the full title and every fact; a PR
+  // chip opens the PR.
+  rowView(section, row, index, t) {
+    const id = `${section.id}-${index}-${row.title}`;
     const open = this.expanded.has(id);
-    const card = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(7).gap(2).rounded(8)
-      .bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => { if (!this.expanded.delete(id)) this.expanded.add(id); cx.notify(); })
-      .child(div().text_size(13).font_semibold().text_color(row.flagged ? t.blocked : t.foreground)
-        .when(!open, (el) => el.max_h(36).overflow_hidden()).child(row.title));
-    if (!open) return card.when(Boolean(row.detail), (el) => el.child(div().text_size(11.5).text_color(t.muted).truncate().child(row.detail)));
-    const lines = [row.detail, ...row.facts].filter(Boolean).map((text) => div().text_size(11.5).text_color(t.muted).child(text));
-    const link = div().id(`link-${id}`).text_size(11.5).text_color(t.accent).cursor_pointer()
-      .on_click((_e, cx) => cx.open_url(row.url)).child(row.url);
+    const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
+      .when(!open, (el) => el.max_h(TITLE_MAX_HEIGHT).overflow_hidden()).child(row.title);
+    const top = h_flex().gap(8).items_start().child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)));
+    const card = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
+      .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => this.toggleCard(id, cx)).child(top);
+    const meta = this.metaLine(row, t);
+    const lines = open ? row.facts.map((text) => div().text_size(11.5).text_color(t.muted).child(text)) : [];
     const ask = h_flex().id(`ask-${id}`).mt(4).h(26).px(10).items_center().justify_center().rounded(6).border_1().border_color(t.border)
       .text_size(12).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.selected))
-      .on_click(() => this.openAskDialog(sectionId, row.itemId)).child("Ask Firstmate");
-    return card.children(lines).when(Boolean(row.url), (el) => el.child(link)).child(ask);
+      .on_click(() => this.openAskDialog(section.id, row.itemId)).child("Ask Firstmate");
+    return card.when(Boolean(meta), (el) => el.child(meta)).children(lines).when(open, (el) => el.child(ask));
+  }
+
+  // The muted repo label and detail, then the PR chip when the card has one.
+  metaLine(row, t) {
+    const repo = row.pr?.repo || row.repo;
+    const parts = [
+      repo && div().flex_none().max_w(150).truncate().text_size(11).text_color(t.dim).child(repo),
+      row.detail && div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.muted).child(row.detail),
+      row.pr && this.prChip(row, t),
+    ].filter(Boolean);
+    return parts.length > 0 ? h_flex().gap(6).items_center().children(parts) : null;
+  }
+
+  // A chip like "PR #12" in the accent color: it opens the PR and changes color under the pointer.
+  prChip(row, t) {
+    const icon = svg("mods/workspace-chrome/git-compare.svg").size(11).flex_none();
+    return h_flex().id(`pr-${row.itemId}`).flex_none().h(18).px(6).gap(4).items_center().rounded(5).bg(t.accent + PILL_ALPHA)
+      .text_size(10.5).font_semibold().text_color(t.accent).cursor_pointer().hover((s) => s.bg(t.accent + CHIP_HOVER_ALPHA))
+      .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(row.url); }).child(icon).child(row.pr.label);
   }
 }
