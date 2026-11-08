@@ -2,7 +2,7 @@
 
 Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the bearings of a [Firstmate](https://github.com/kunchenguid/firstmate) that is open in any tab.
 
-The panel sends notes to a Firstmate (Discuss) and runs actions (Done, Defer, Drop, Stop, Start now) through that Firstmate's inbox, with `bin/fm-inbox.sh note`. It does nothing else to a Firstmate.
+The panel sends notes to a Firstmate (Discuss) and runs actions (Done, Defer, Drop, Stop, Start now) through that Firstmate's inbox, with `bin/fm-inbox.sh note`.
 
 ## Features
 
@@ -44,7 +44,7 @@ A Firstmate is found when one of its panes is open in its home folder. The pick 
 
 A card opens when you click its title. Card details are fetched once per task with `fm-tasks-axi.sh show <id> --full`. If a refresh fails, the last data stays with its age and one error line. While a Firstmate is in away mode, the panel says so and keeps the last data.
 
-**Discuss** (the speech-bubble icon) opens a multi-line note box. Cmd or Ctrl+Enter sends, Enter adds a line and Esc cancels. The note holds the section and the item id, never the card text. On success the dialog closes and the icon shows a check. A failure keeps the dialog open with the error.
+**Discuss** (the message icon) opens a multi-line note box. Cmd or Ctrl+Enter sends, Enter adds a line and Esc cancels. The note holds the section and the item id, never the card text. On success the dialog closes and the icon shows a check. A failure keeps the dialog open with the error.
 
 An action button sends one note, `[bearings panel] <action> <section> <item id>`.
 
