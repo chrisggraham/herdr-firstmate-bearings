@@ -1,0 +1,8 @@
+{
+  "name": "herdr-firstmate-bearings",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
