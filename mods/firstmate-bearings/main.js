@@ -541,10 +541,11 @@ export default class FirstmateBearings extends View {
     return view.children(open ? this.openedRows(row, typed, otherLinks, entry, id, t) : []);
   }
 
-  // The part of an opened card below the two lines: all the badges, the detail, the long texts, the other link chips.
+  // The part of an opened card below the two lines: a divider, then all the badges, the detail, the long texts, the other link chips.
   openedRows(row, typed, otherLinks, entry, id, t) {
     const links = otherLinks.map((link, i) => this.linkChip(link, `${id}-${i}`, t));
     return [
+      div().h(1).my(2).bg(t.border),
       ...this.fieldRows({ badges: typed.badges, texts: typed.texts }, t, row.detail),
       ...(entry?.failedAt !== undefined ? [div().text_size(10.5).text_color(t.dim).child("Details unavailable")] : []),
       ...(links.length > 0 ? [h_flex().flex_wrap().gap(4).items_center().mt(3).children(links)] : []),
