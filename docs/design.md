@@ -8,7 +8,8 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 - `schema` must be `fm-bearings.v1`. Anything else shows "Unsupported bearings version (got X)" and no sections.
 - Ignore unknown keys. A missing key is an empty section.
 - Never read Firstmate's `state/` or `data/`. Never use the output's `home` field (it can be relative); the name comes from discovery.
-- Use the default limited output, with no `--include-prs`. When `omitted[]` is non-empty, show a "Show N more" button that fetches the full lists in place; "Show fewer" goes back.
+- Use no `--include-prs`. Always pass `--all-decisions` and `--all-landed`, so every item shows.
+- After each snapshot, run `<home>/bin/fm-tasks-axi.sh show <id> --full` once per task id not yet cached (three at a time), and again only when that id's snapshot entry changes. The record gives the card its full title and fields.
 - Command: `exec("<home>/bin/fm-bearings-snapshot.sh", ["--json"], {on: machine})`, 30 s timeout, `on` omitted for this machine.
 
 ## Discovery

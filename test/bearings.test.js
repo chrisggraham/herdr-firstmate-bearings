@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isAwayRefusal, readBearings } from "../mods/firstmate-bearings/bearings.js";
+import { cardOf, isAwayRefusal, readBearings, taskRecordKeys, REVEAL_FLAGS } from "../mods/firstmate-bearings/bearings.js";
 
 const fixture = readFileSync(new URL("./fixtures/bearings.json", import.meta.url), "utf8");
 const countsOf = (bearings) => Object.fromEntries(bearings.sections.map((s) => [s.id, s.count]));
@@ -28,7 +28,6 @@ test("an unknown schema gives the unsupported state and no sections", () => {
 test("missing keys give empty sections", () => {
   const bearings = readBearings(JSON.stringify({ schema: "fm-bearings.v1" }), { hideEmpty: false });
   assert.ok(Object.values(countsOf(bearings)).every((n) => n === 0));
-  assert.ok(bearings.sections.every((s) => s.hidden === 0));
 });
 
 test("unknown keys are ignored", () => {
@@ -86,25 +85,6 @@ test("a PR URL with no pull number still gets a plain chip", () => {
   assert.deepEqual(readBearings(text).sections[0].rows[0].pr, { label: "PR", repo: "" });
 });
 
-test("a section with omitted items has a hidden count and the flag that reveals them", () => {
-  const sections = Object.fromEntries(readBearings(fixture).sections.map((s) => [s.id, s]));
-  assert.deepEqual([sections.landed.hidden, sections.landed.revealFlag], [3, "--all-landed"]);
-  assert.equal(sections["in-flight"].hidden, 0);
-});
-
-test("hidden counts come from 'showing X of Y' and from a trailing count", () => {
-  const omitted = [{ surface: "holds bucketed blocked: 4", reveal: "--all-decisions" }, { surface: "landed showing 1 of 4", reveal: "--all-landed" }];
-  const sections = Object.fromEntries(readBearings(JSON.stringify({ schema: "fm-bearings.v1", omitted }), { hideEmpty: false }).sections.map((s) => [s.id, s]));
-  assert.equal(sections.decisions.hidden, 4);
-  assert.equal(sections.landed.hidden, 3);
-});
-
-test("an omitted surface with no count gives no hidden items", () => {
-  const omitted = [{ surface: "landed per-home capped at 6 for 1 home(s)", reveal: "--all-landed" }, { surface: "prs not requested", reveal: "--include-prs" }];
-  const sections = readBearings(JSON.stringify({ schema: "fm-bearings.v1", omitted }), { hideEmpty: false }).sections;
-  assert.ok(sections.every((s) => s.hidden === 0));
-});
-
 test("a hold card shows its title alone, without 'Captain' or the reason, and a plain pill", () => {
   const decisions = [
     { id: "a", verb: "captain-hold", owner: "(main)", summary: "Captain: Stripe setup for billing launch (priority): Captain does the Stripe setup by hand…", question: "Q" },
@@ -114,7 +94,7 @@ test("a hold card shows its title alone, without 'Captain' or the reason, and a 
   const rows = readBearings(JSON.stringify({ schema: "fm-bearings.v1", decisions_open: decisions })).sections[0].rows;
   assert.deepEqual(rows.map((r) => r.title), ["Stripe setup for billing launch (priority)", "PHP2Shell: patch the sites (captain hand task)", "PHP2Shell: patch fnContact and retire two PHP 5.6 sites"]);
   assert.deepEqual(rows.map((r) => r.status.text), ["decision", "hand task", "decision"]);
-  assert.ok(rows.every((r) => !r.detail.includes("captain-hold") && !r.detail.includes("(main)") && !r.facts.some((f) => f.includes("(main)"))));
+  assert.ok(rows.every((r) => !r.detail.includes("captain-hold") && !r.detail.includes("(main)") && !r.facts.some(([, v]) => v.includes("(main)"))));
 });
 
 test("PR rows carry their URLs and other rows do not", () => {
@@ -135,9 +115,9 @@ test("text that is not JSON throws", () => {
 test("an opened card lists the facts the snapshot has and skips empty ones", () => {
   const sections = Object.fromEntries(readBearings(fixture).sections.map((s) => [s.id, s]));
   assert.deepEqual(sections["in-flight"].rows[1].facts,
-    ["Repo: example/widgets", "State: paused", "Doing: waiting on CI", "Kind: task", "Id: t-2"]);
-  assert.deepEqual(sections.queued.rows[0].facts, ["Owner: fleet", "Filed: 2026-01-01"]);
-  assert.deepEqual(sections.decisions.rows[0].facts.slice(0, 1), ["Question: Which name for the widget? A or B."]);
+    [["Repo", "example/widgets"], ["State", "paused"], ["Doing", "waiting on CI"], ["Kind", "task"], ["Id", "t-2"]]);
+  assert.deepEqual(sections.queued.rows[0].facts, [["Owner", "fleet"], ["Filed", "2026-01-01"]]);
+  assert.deepEqual(sections.decisions.rows[0].facts.slice(0, 1), [["Question", "Which name for the widget? A or B."]]);
 });
 
 test("every row carries its item id for the Ask dialog", () => {
@@ -164,4 +144,37 @@ test("a card's counts name the waiting decisions and the tasks in flight", () =>
 test("a queued card with owner and reason both empty has no detail", () => {
   const text = JSON.stringify({ schema: "fm-bearings.v1", gates: [{ title: "Task", owner: "(main)", reason: "-" }] });
   assert.equal(readBearings(text).sections[0].rows[0].detail, "");
+});
+
+test("the snapshot is always fetched with the flags that list every decision and landed item", () => {
+  assert.deepEqual(REVEAL_FLAGS, ["--all-decisions", "--all-landed"]);
+});
+
+test("a task record gives the card its full title and every field, then the snapshot fields it lacks", () => {
+  const row = { title: "Add widget c…", facts: [["Repo", "example/widgets"], ["State", "working"], ["Doing", "writing tests"]] };
+  const record = { id: "t-1", title: "Captain: Add widget cache, with a long name that the snapshot cut", state: "working", deps: "none", closed: "-", note: "" };
+  assert.deepEqual(cardOf(row, record), {
+    title: "Add widget cache, with a long name that the snapshot cut",
+    fields: [["id", "t-1"], ["title", record.title], ["state", "working"], ["Repo", "example/widgets"], ["Doing", "writing tests"]],
+  });
+});
+
+test("a card with no record keeps its snapshot title and fields", () => {
+  const row = { title: "Add widget cache", facts: [["Repo", "example/widgets"], ["Kind", "none"]] };
+  assert.deepEqual(cardOf(row, undefined), { title: "Add widget cache", fields: [["Repo", "example/widgets"]] });
+  assert.deepEqual(cardOf(row, {}).title, "Add widget cache");
+});
+
+test("a snapshot field is not repeated when the record has the same key in another spelling", () => {
+  const row = { title: "T", facts: [["Blocked by", "x"], ["Owner", "fleet"]] };
+  assert.deepEqual(cardOf(row, { blocked_by: "y" }).fields, [["blocked_by", "y"], ["Owner", "fleet"]]);
+});
+
+test("each task id appears once, with a signature that changes when its snapshot entry changes", () => {
+  const snapshot = (doing) => ({ in_flight: [{ id: "t-1", doing }], recorded_prs: [{ id: "t-1", url: "u" }], secondmates: [{ id: "sm-a" }], gates: [{ title: "no id" }] });
+  const [first] = taskRecordKeys(snapshot("a"));
+  assert.equal(taskRecordKeys(snapshot("a")).length, 1);
+  assert.equal(first.id, "t-1");
+  assert.notEqual(taskRecordKeys(snapshot("b"))[0].signature, first.signature);
+  assert.equal(taskRecordKeys(snapshot("a"))[0].signature, first.signature);
 });

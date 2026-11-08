@@ -30,6 +30,8 @@ export const scriptPath = (home) => pathIn(home, SCRIPT);
 // This file exists in a Firstmate home while it is in away mode.
 export const awayPath = (home) => pathIn(home, "state/.afk");
 
+export const showPath = (home) => pathIn(home, "bin/fm-tasks-axi.sh");
+
 export const inboxPath = (home) => pathIn(home, "bin/fm-inbox.sh");
 
 // The space's name when someone named it, else the folder's name.
