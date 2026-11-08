@@ -454,7 +454,7 @@ export default class FirstmateBearings extends View {
     return v_flex().flex_none().child(header).children(rows);
   }
 
-  // A card has a bar in its section's color, its full title, a status pill and a muted line with
+  // A card has a bar in its section's color, its title (one line cut to the width, wrapped in full when opened), a status pill and a muted line with
   // the repo and detail. A left click opens it to every field; a PR chip opens the PR.
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
@@ -462,7 +462,7 @@ export default class FirstmateBearings extends View {
     const record = this.records.get(this.home.key)?.get(row.itemId)?.record;
     const card = cardOf(row, record);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
-      .child(card.title);
+      .when(!open, (el) => el.truncate()).child(card.title);
     const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
