@@ -6,8 +6,14 @@ export const MAX_ID_LENGTH = 64;
 // The words every Discuss control shows (tooltip, dialog title, send button), naming the Firstmate by its panel label.
 export const discussLabel = (homeName) => `Discuss with Firstmate (${homeName})`;
 
-// "Sent to Firstmate (name)": a confirmation or failure text that names the Firstmate by its panel label.
+// "Could not send to Firstmate (name)": a failure text that names the Firstmate by its panel label.
 export const toFirstmate = (words, homeName) => `${words} Firstmate (${homeName})`;
+
+// The shared-state key the dialog writes to tell the panel which card to mark as sent.
+export const SENT_SHARED_KEY = "firstmate-bearings.discussSent";
+
+// Cmd+Enter (macOS) or Ctrl+Enter sends; a bare Enter adds a line.
+export const isSendKey = (e) => e.key === "enter" && Boolean(e.modifiers?.platform || e.modifiers?.control);
 
 const PREFIX = "[bearings panel] discuss";
 
@@ -15,7 +21,7 @@ export const sanitizeId = (itemId) => String(itemId).replace(/\s+/g, "").slice(0
 
 export function noteBody(sectionId, itemId, typed) {
   const id = sanitizeId(itemId);
-  const text = String(typed).trim();
+  const text = String(typed).replace(/\s+/g, " ").trim();
   const target = `${PREFIX} ${sectionId} ${id}`;
   return text ? `${target} - ${text}` : target;
 }

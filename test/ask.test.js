@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { noteBody, noteArgs, newRequestId, MAX_ID_LENGTH, discussLabel, toFirstmate } from "../mods/firstmate-bearings/ask.js";
+import { noteBody, noteArgs, newRequestId, MAX_ID_LENGTH, discussLabel, toFirstmate, isSendKey } from "../mods/firstmate-bearings/ask.js";
 
 test("the note names the section, the item id and the typed text", () => {
   assert.equal(noteBody("in-flight", "t-1", "why is this slow?"), "[bearings panel] discuss in-flight t-1 - why is this slow?");
@@ -38,7 +38,18 @@ test("the Discuss label names the Firstmate by its panel label", () => {
   assert.equal(discussLabel("Workspace/example"), "Discuss with Firstmate (Workspace/example)");
 });
 
-test("the sent and failure texts name the Firstmate by its panel label", () => {
-  assert.equal(toFirstmate("Sent to", "Workspace/example"), "Sent to Firstmate (Workspace/example)");
+test("the failure text name the Firstmate by its panel label", () => {
   assert.equal(toFirstmate("Could not send to", "Workspace/example"), "Could not send to Firstmate (Workspace/example)");
+  assert.equal(toFirstmate("Could not send to", "Workspace/example"), "Could not send to Firstmate (Workspace/example)");
+});
+
+test("a note typed on several lines is sent as one line", () => {
+  assert.equal(noteBody("queued", "g-1", "first\n\nsecond  line\n"), "[bearings panel] discuss queued g-1 - first second line");
+});
+
+test("Cmd+Enter and Ctrl+Enter send; a bare Enter does not", () => {
+  assert.equal(isSendKey({ key: "enter", modifiers: { platform: true } }), true);
+  assert.equal(isSendKey({ key: "enter", modifiers: { control: true } }), true);
+  assert.equal(isSendKey({ key: "enter", modifiers: {} }), false);
+  assert.equal(isSendKey({ key: "a", modifiers: { control: true } }), false);
 });
