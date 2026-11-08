@@ -20,7 +20,7 @@ const SECTIONS = [
   { id: "prs", title: "PRs", tone: "ansi4", items: (b) => list(b.recorded_prs), row: prRow },
   { id: "secondmates", title: "Secondmates", tone: "dim", hasTask: false, items: (b) => list(b.secondmates), row: secondmateRow },
   { id: "queued", title: "Queued", tone: "muted", items: (b) => list(b.gates), row: (g) => ({
-    title: g.title ?? "", detail: joinParts(plainOwner(g.owner), g.reason), status: hasValue(g.blocked_by) ? statusOf("held") : undefined, facts: facts({ "Blocked by": g.blocked_by, Reason: g.reason, Owner: plainOwner(g.owner), Filed: g.filed }) }) },
+    title: g.title ?? "", detail: joinParts(plainOwner(g.owner), g.reason), status: hasValue(g.blocked_by) ? statusOf("held") : undefined, reason: hasValue(g.reason) ? g.reason : "", facts: facts({ "Blocked by": g.blocked_by, Reason: g.reason, Owner: plainOwner(g.owner), Filed: g.filed }) }) },
   { id: "landed", title: "Landed", tone: "ansi2", items: (b) => list(b.landed), row: (l) => ({
     title: l.what ?? "", detail: plainOwner(l.owner), status: statusOf("merged"), facts: facts({ Owner: plainOwner(l.owner), Artifact: l.artifact }) }) },
 ];

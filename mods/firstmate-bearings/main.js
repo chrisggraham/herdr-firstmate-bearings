@@ -8,6 +8,7 @@ import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings } from "./bearings.js
 import { dropGoneRecords, keysToFetch } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
 import { noteArgs, newRequestId } from "./ask.js";
+import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { loadSet, saveSet, toggleId } from "./state.js";
@@ -36,6 +37,7 @@ const firstLine = (text) => String(text).trim().split("\n")[0];
 export default class FirstmateBearings extends View {
   init(_props, cx) {
     if (props()?.ask) return this.initAsk(cx);
+    if (props()?.confirm) return this.initConfirm();
     this.checks = new Map();
     this.counts = new Map();
     this.away = false;
@@ -49,6 +51,7 @@ export default class FirstmateBearings extends View {
     // Full task records by Firstmate: home key -> task id -> { signature, record }.
     this.records = new Map();
     this.logging = Promise.resolve();
+    this.pending = new Set();
     this.shown = null;
     this.running = null;
     cx.timer.every(FETCH_EVERY_MS, (cx) => { this.fetch(cx); this.checkAway(cx); });
@@ -235,35 +238,90 @@ export default class FirstmateBearings extends View {
     openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
   }
 
+  // Sends one note to a Firstmate and shows a toast. Returns true when the note was sent.
+  async deliver({ machine, folder, homeName }, args, sent) {
+    try {
+      const result = await exec(inboxPath({ machine, folder }), args, { on: machine });
+      if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
+      notify({ title: `${sent} ${homeName}`, level: "success" });
+      return true;
+    } catch (e) {
+      notify({ title: `Could not send to ${homeName}`, body: firstLine(e.message ?? e), level: "error" });
+      return false;
+    }
+  }
+
   send(cx) {
     if (this.sending) return;
     this.sending = true;
-    const { machine, homeName, sectionId, itemId } = this.ask;
+    const { sectionId, itemId } = this.ask;
     cx.spawn(async (cx) => {
-      try {
-        const result = await exec(inboxPath(this.ask), noteArgs(this.requestId, sectionId, itemId, this.text), { on: machine });
-        if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
-        notify({ title: `Sent to ${homeName}`, level: "success" });
-        closeOverlay(props().overlay);
-      } catch (e) {
-        notify({ title: `Could not send to ${homeName}`, body: firstLine(e.message ?? e), level: "error" });
-      } finally {
-        this.sending = false;
-        cx.notify();
-      }
+      if (await this.deliver(this.ask, noteArgs(this.requestId, sectionId, itemId, this.text), "Sent to")) closeOverlay(props().overlay);
+      this.sending = false;
+      cx.notify();
     });
+  }
+
+  // A button of a card: Drop and Stop ask first, the others send at once.
+  runAction(action, section, row) {
+    const home = this.home;
+    const target = { machine: home.machine, folder: home.folder, homeName: home.name };
+    if (ACTIONS[action].confirm) {
+      const confirm = { ...target, action, sectionId: section.id, itemId: row.itemId, title: row.title || row.itemId };
+      openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { confirm } });
+      return;
+    }
+    // A second click while the first note is on its way would send the action twice.
+    const key = `${action} ${section.id} ${row.itemId}`;
+    if (this.pending.has(key)) return;
+    this.pending.add(key);
+    this.deliver(target, actionArgs(newRequestId(), action, section.id, row.itemId), `${ACTIONS[action].label} sent to`)
+      .finally(() => this.pending.delete(key));
+  }
+
+  // The confirm dialog: "<Action> <title>?" with Cancel and the action.
+  initConfirm() {
+    this.confirm = props().confirm;
+    this.requestId = newRequestId();
+    this.sending = false;
+  }
+
+  sendConfirmed(cx) {
+    if (this.sending) return;
+    this.sending = true;
+    const { action, sectionId, itemId } = this.confirm;
+    cx.spawn(async (cx) => {
+      if (await this.deliver(this.confirm, actionArgs(this.requestId, action, sectionId, itemId), `${ACTIONS[action].label} sent to`)) closeOverlay(props().overlay);
+      this.sending = false;
+      cx.notify();
+    });
+  }
+
+  confirmView() {
+    const t = theme();
+    const { action, title } = this.confirm;
+    const label = ACTIONS[action].label;
+    return v_flex().id("firstmate-confirm").w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
+      .child(div().text_size(14).font_semibold().child(`${label} ${title}?`))
+      .child(h_flex().pt(20).gap(8).justify_end()
+        .child(this.dialogButton(t, "confirm-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
+        .child(this.dialogButton(t, "confirm-send", this.sending ? "Sending…" : label, true, (_e, cx) => this.sendConfirmed(cx))));
   }
 
   askKey(e, cx) {
     if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
   }
 
-  askView() {
-    const t = theme();
-    const button = (id, text, primary, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
+  // A dialog button: the primary one is filled, the other has an outline.
+  dialogButton(t, id, text, primary, run) {
+    return h_flex().id(id).h(32).px(14).items_center().rounded(8)
       .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
       .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
-      .hover((s) => s.opacity(0.88)).on_click(action).child(text);
+      .hover((s) => s.opacity(0.88)).on_click(run).child(text);
+  }
+
+  askView() {
+    const t = theme();
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Discuss with ${this.ask.homeName}`))
@@ -271,12 +329,13 @@ export default class FirstmateBearings extends View {
       .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
       .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
       .child(h_flex().pt(20).gap(8).justify_end()
-        .child(button("ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
-        .child(button("ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
+        .child(this.dialogButton(t, "ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
+        .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
   }
 
   render(cx) {
     if (this.ask) return this.askView();
+    if (this.confirm) return this.confirmView();
     const t = theme();
     const candidates = findCandidates(spaces(), panes());
     this.discover(candidates, cx);
@@ -408,14 +467,25 @@ export default class FirstmateBearings extends View {
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
       .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
+    const buttons = open ? actionsFor(section.id, row).map((action) => this.actionButton(action, section, row, id, t)) : [];
     const top = h_flex().gap(8).items_start().child(title).when(Boolean(row.status), (el) => el.child(this.statusPill(row.status, t)))
       .when(open, (el) => el.child(discuss));
+    const actions = buttons.length > 0 ? h_flex().gap(2).items_center().children(buttons) : null;
     const view = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(6).gap(3).rounded(8)
       .bg(t.raised).border_l(3).border_color(t[section.tone] ?? t.muted).cursor_pointer().hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => this.toggleCard(id, cx)).child(top);
     const meta = this.metaLine(row, t);
     const grid = open ? this.fieldGrid(card.fields, t) : [];
-    return view.when(Boolean(meta), (el) => el.child(meta)).children(grid);
+    return view.when(Boolean(meta), (el) => el.child(meta)).when(Boolean(actions), (el) => el.child(actions)).children(grid);
+  }
+
+  // A small icon button like Discuss: muted icon, accent on hover, the plain action name as tooltip.
+  actionButton(action, section, row, id, t) {
+    const { label, icon } = ACTIONS[action];
+    return h_flex().id(`${action}-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
+      .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(label)
+      .on_click((_e, cx) => { cx.stop_propagation(); this.runAction(action, section, row); })
+      .child(svg(`mods/firstmate-bearings/${icon}`).size(13).flex_none());
   }
 
   // Every field of an opened card as a two-column grid: a small uppercase muted key and a value that wraps.
