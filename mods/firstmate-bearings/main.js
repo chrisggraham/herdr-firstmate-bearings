@@ -7,7 +7,7 @@ import { awayPath, findCandidates, inboxPath, listHomes, loginShellArgs, needsCh
 import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings, repoOf } from "./bearings.js";
 import { dropGoneRecords, keysToFetch, retryFailedRecords } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
-import { discussLabel, noteArgs, newRequestId } from "./ask.js";
+import { discussLabel, noteArgs, newRequestId, toFirstmate } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
 import { typedFields } from "./fields.js";
@@ -269,11 +269,11 @@ export default class FirstmateBearings extends View {
     try {
       const result = await exec(inboxPath({ machine, folder }), args, { on: machine });
       if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
-      notify({ title: `${sent} ${homeName}`, level: "success" });
+      notify({ title: toFirstmate(sent, homeName), level: "success" });
       return null;
     } catch (e) {
       const error = firstLine(e.message ?? e);
-      notify({ title: `Could not send to ${homeName}`, body: error, level: "error" });
+      notify({ title: toFirstmate("Could not send to", homeName), body: error, level: "error" });
       return error;
     }
   }
@@ -375,7 +375,7 @@ export default class FirstmateBearings extends View {
 
   askView() {
     const t = theme();
-    if (this.sent) return this.sentView(t, `Sent to ${this.ask.homeName}`);
+    if (this.sent) return this.sentView(t, toFirstmate("Sent to", this.ask.homeName));
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(discussLabel(this.ask.homeName)))
