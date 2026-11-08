@@ -11,7 +11,7 @@ import { noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { readConfig } from "./config.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
-import { loadSet, saveSet, toggleId } from "./state.js";
+import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
@@ -205,6 +205,17 @@ export default class FirstmateBearings extends View {
     cx.notify();
   }
 
+  collapseAll(cx) {
+    toggleAll(this.sectionIds(), this.collapsed, this.expanded);
+    saveSet(localStorage, COLLAPSED_STORE, this.collapsed);
+    saveSet(localStorage, EXPANDED_STORE, this.expanded);
+    cx.notify();
+  }
+
+  sectionIds() {
+    return (this.data?.sections ?? []).map((section) => section.id);
+  }
+
   toggleCard(id, cx) {
     toggleId(this.expanded, id);
     saveSet(localStorage, EXPANDED_STORE, this.expanded);
@@ -390,7 +401,7 @@ export default class FirstmateBearings extends View {
     const header = h_flex().h(42).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
       .child(back).child(name).child(machine)
       .child(this.pill(updated, t.muted, t.hover))
-      .child(this.refreshButton(t));
+      .child(this.collapseButton(t)).child(this.refreshButton(t));
     return v_flex().flex_1().min_h(0).child(header)
       .child(v_flex().id("firstmate-sections").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
         .children(this.awayLines(home, t)).children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
@@ -424,6 +435,16 @@ export default class FirstmateBearings extends View {
       .child(icon.size(14).flex_none().text_color(busy ? t.working : t.foreground));
   }
 
+  // Closes every section and card; when all are closed, opens every section.
+  collapseButton(t) {
+    const ids = this.sectionIds();
+    const expand = ids.length > 0 && allClosed(ids, this.collapsed);
+    const label = expand ? "Expand all" : "Collapse all";
+    return h_flex().id("firstmate-collapse-all").size(26).flex_none().items_center().justify_center().rounded(6)
+      .cursor_pointer().hover((s) => s.bg(t.hover)).tooltip(label).on_click((_e, cx) => this.collapseAll(cx))
+      .child(svg(`mods/firstmate-bearings/${expand ? "expand-all" : "collapse-all"}.svg`).size(14).flex_none().text_color(t.foreground));
+  }
+
   errorLines(t) {
     if (!this.error) return [];
     const stale = this.updated ? ` (showing data from ${ago(this.updated)})` : "";
@@ -454,7 +475,7 @@ export default class FirstmateBearings extends View {
     return v_flex().flex_none().child(header).children(rows);
   }
 
-  // A card has a bar in its section's color, its full title, a status pill and a muted line with
+  // A card has a bar in its section's color, its title (one line cut to the width, wrapped in full when opened), a status pill and a muted line with
   // the repo and detail. A left click opens it to every field; a PR chip opens the PR.
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
@@ -462,7 +483,7 @@ export default class FirstmateBearings extends View {
     const record = this.records.get(this.home.key)?.get(row.itemId)?.record;
     const card = cardOf(row, record);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
-      .child(card.title);
+      .when(!open, (el) => el.truncate()).child(card.title);
     const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
       .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
