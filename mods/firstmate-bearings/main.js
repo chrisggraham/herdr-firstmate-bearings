@@ -51,6 +51,7 @@ export default class FirstmateBearings extends View {
     // Full task records by Firstmate: home key -> task id -> { signature, record }.
     this.records = new Map();
     this.logging = Promise.resolve();
+    this.pending = new Set();
     this.shown = null;
     this.running = null;
     cx.timer.every(FETCH_EVERY_MS, (cx) => { this.fetch(cx); this.checkAway(cx); });
@@ -266,11 +267,16 @@ export default class FirstmateBearings extends View {
     const home = this.home;
     const target = { machine: home.machine, folder: home.folder, homeName: home.name };
     if (ACTIONS[action].confirm) {
-      const confirm = { ...target, action, sectionId: section.id, itemId: row.itemId, title: row.title };
+      const confirm = { ...target, action, sectionId: section.id, itemId: row.itemId, title: row.title || row.itemId };
       openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { confirm } });
       return;
     }
-    this.deliver(target, actionArgs(newRequestId(), action, section.id, row.itemId), `${ACTIONS[action].label} sent to`);
+    // A second click while the first note is on its way would send the action twice.
+    const key = `${action} ${section.id} ${row.itemId}`;
+    if (this.pending.has(key)) return;
+    this.pending.add(key);
+    this.deliver(target, actionArgs(newRequestId(), action, section.id, row.itemId), `${ACTIONS[action].label} sent to`)
+      .finally(() => this.pending.delete(key));
   }
 
   // The confirm dialog: "<Action> <title>?" with Cancel and the action.
