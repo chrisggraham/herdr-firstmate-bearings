@@ -64,6 +64,17 @@ function facts(values) {
 const isEmptyField = (value) => !hasValue(value) || value === "none";
 const fieldKey = (label) => label.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+// Fields the card already shows in its own way, so the grid leaves them out: the repo line, and the card title (also named name, summary or what).
+const SHOWN_ELSEWHERE = new Set(["repo", "title", "name", "summary", "what"]);
+
+// Whether the card shows this field elsewhere: by key, as the status pill (and never the state "unknown"), or as the PR chip.
+function isShownElsewhere(row, [label, value]) {
+  const key = fieldKey(label);
+  if (SHOWN_ELSEWHERE.has(key)) return true;
+  if (key === "state") return Boolean(row.status) || value === "unknown";
+  return Boolean(row.pr) && value === row.url;
+}
+
 // The title and fields an opened card shows. With a task record (from `fm-tasks-axi.sh show`),
 // the title is the record's full title and the fields are every record field, then the snapshot
 // fields the record does not already have. Fields with no value are left out.
@@ -71,7 +82,7 @@ export function cardOf(row, record) {
   const recordFields = Object.entries(record ?? {}).filter(([, value]) => typeof value === "string");
   const shown = new Set(recordFields.map(([key]) => fieldKey(key)));
   const snapshotFields = row.facts.filter(([label]) => !shown.has(fieldKey(label)));
-  const fields = [...recordFields, ...snapshotFields].filter(([, value]) => !isEmptyField(value));
+  const fields = [...recordFields, ...snapshotFields].filter((field) => !isEmptyField(field[1]) && !isShownElsewhere(row, field));
   const title = record?.title ? stripCaptain(record.title) : row.title;
   return { title, fields };
 }
