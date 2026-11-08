@@ -549,7 +549,7 @@ export default class FirstmateBearings extends View {
       .child(svg(`mods/firstmate-bearings/${sentNow ? "action-done.svg" : icon}`).size(13).flex_none());
   }
 
-  // Every field of an opened card as a two-column grid: a small uppercase muted key and a value that wraps.
+  // Every field of an opened card as a two-column grid: a small uppercase dim key and a value, smaller and softer than the title, that wraps.
   fieldGrid(fields, t) {
     return fields.map(([key, value], i) => h_flex().gap(8).items_start().py(3)
       .when(i > 0, (el) => el.border_t(1).border_color(t.border))
@@ -560,7 +560,7 @@ export default class FirstmateBearings extends View {
   // A field value: any http(s) URL in it is a link that opens in the browser; the rest is plain text.
   fieldValue(value, index, t) {
     const segments = splitUrls(value);
-    const box = v_flex().flex_1().min_w(0).text_size(12).text_color(t.foreground);
+    const box = v_flex().flex_1().min_w(0).text_size(11.5).text_color(t.muted);
     if (!segments.some((s) => s.url)) return box.child(String(value));
     return box.children(segments.map((s, i) => s.url
       ? div().id(`url-${index}-${i}`).text_color(t.accent).cursor_pointer().hover((el) => el.opacity(0.7))

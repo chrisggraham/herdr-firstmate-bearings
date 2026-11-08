@@ -155,13 +155,13 @@ test("a task record gives the card its full title and every field, then the snap
   const record = { id: "t-1", title: "Captain: Add widget cache, with a long name that the snapshot cut", state: "working", deps: "none", closed: "-", note: "" };
   assert.deepEqual(cardOf(row, record), {
     title: "Add widget cache, with a long name that the snapshot cut",
-    fields: [["id", "t-1"], ["title", record.title], ["state", "working"], ["Repo", "example/widgets"], ["Doing", "writing tests"]],
+    fields: [["id", "t-1"], ["state", "working"], ["Doing", "writing tests"]],
   });
 });
 
 test("a card with no record keeps its snapshot title and fields", () => {
-  const row = { title: "Add widget cache", facts: [["Repo", "example/widgets"], ["Kind", "none"]] };
-  assert.deepEqual(cardOf(row, undefined), { title: "Add widget cache", fields: [["Repo", "example/widgets"]] });
+  const row = { title: "Add widget cache", facts: [["Repo", "example/widgets"], ["Kind", "none"], ["Id", "t-9"]] };
+  assert.deepEqual(cardOf(row, undefined), { title: "Add widget cache", fields: [["Id", "t-9"]] });
   assert.deepEqual(cardOf(row, {}).title, "Add widget cache");
 });
 
@@ -177,4 +177,16 @@ test("each task id appears once, with a signature that changes when its snapshot
   assert.equal(first.id, "t-1");
   assert.notEqual(taskRecordKeys(snapshot("b"))[0].signature, first.signature);
   assert.equal(taskRecordKeys(snapshot("a"))[0].signature, first.signature);
+});
+
+test("a card leaves out the fields it already shows in its own way", () => {
+  const row = { title: "T", status: { text: "working", tone: "working" }, pr: { label: "PR #1", repo: "o/r" }, url: "https://github.com/o/r/pull/1",
+    facts: [["Repo", "o/r"], ["State", "working"], ["Doing", "x"]] };
+  const record = { id: "t-1", title: "T", name: "T", summary: "s", what: "w", repo: "o/r", state: "working", pr: "https://github.com/o/r/pull/1", kind: "ship" };
+  assert.deepEqual(cardOf(row, record).fields, [["id", "t-1"], ["kind", "ship"], ["Doing", "x"]]);
+});
+
+test("a card keeps a state it does not show as a pill, and leaves out the state unknown", () => {
+  assert.deepEqual(cardOf({ title: "T", facts: [["State", "paused"]] }, undefined).fields, [["State", "paused"]]);
+  assert.deepEqual(cardOf({ title: "T", facts: [["State", "unknown"]] }, undefined).fields, []);
 });
