@@ -12,7 +12,7 @@ A **Firstmate** button in the tab bar opens a sidebar panel. The panel lists ope
 - A candidate is a Firstmate home when `test -x <folder>/bin/fm-bearings-snapshot.sh` exits 0 on its machine. The result is cached per machine and folder.
 - Only the picked Firstmate is fetched, right away and then every 30 seconds: `exec("<home>/bin/fm-bearings-snapshot.sh", ["--json"], {on: machine})`. One run at a time.
 - The schema must be `fm-bearings.v1`; anything else shows "Unsupported bearings version (got X)".
-- A PR row calls `cx.open_url(url)`.
+- The PR chip of a PR row calls `cx.open_url(url)`.
 
 ## Built from
 

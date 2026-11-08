@@ -28,13 +28,13 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 
 ## Display
 
-Switcher, "updated 12s ago", then collapsible sections with counts (collapsed and opened state in memory only). A section with no items is hidden unless `hideEmptySections` is `false` in `config.json`.
+Switcher, "updated 12s ago", then collapsible sections with counts (collapsed and opened state kept in `localStorage`, so a switch of space keeps it). A section with no items is hidden unless `hideEmptySections` is `false` in `config.json`.
 
-Each item is a card: a title (two lines at most), a muted detail line, and a subtle background. A left click opens the card in place to the full title and every fact the snapshot has for it; a second click closes it. Right-click is left free.
+Each item is a card: a bar in the section color (Waiting on you blocked, In flight accent, PRs blue, Secondmates dim, Queued muted, Landed done), a title (two lines at most), a status pill, a muted repo label and detail line. Colors are theme tokens only. A left click opens the card in place to the full title and every fact the snapshot has for it; a second click closes it. Right-click is left free.
 
 1. **Waiting on you**: `decisions_open[]` summary; opened, the question, key and owner. Highlighted above zero.
-2. **In flight**: `in_flight[]` name; detail is repo, state, doing.
-3. **PRs**: `recorded_prs[]` titled by the task it belongs to; detail is the URL. The opened card has the PR link, which calls `cx.open_url(url)`.
+2. **In flight**: `in_flight[]` name; repo label, state pill, detail is doing.
+3. **PRs**: `recorded_prs[]` titled by the task it belongs to; the card has a "PR #n" chip with the repo, which calls `cx.open_url(url)`.
 4. **Secondmates**: `secondmates[]` id, state, freshness. Unreadable ones (freshness `unavailable`) are flagged.
 5. **Queued**: `gates[]` title; opened, blocker, reason, owner, filed date.
 6. **Landed**: `landed[]` what; opened, owner and artifact.

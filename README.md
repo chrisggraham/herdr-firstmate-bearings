@@ -6,9 +6,11 @@ Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the be
 
 - Lists the Firstmates open anywhere in Herdr, on this computer and on connected machines.
 - Shows one Firstmate's bearings in six sections: Waiting on you, In flight, PRs, Secondmates, Queued and Landed. Each section is collapsible and shows a count. Sections with nothing in them are hidden.
-- Each item is a card with a title (two lines at most) and a muted detail line. A left click opens the card in place to show the full title and every fact the snapshot has. Click again to close it.
-- Refreshes every 30 seconds. If a refresh fails, the last data stays, marked with its age, with one error line.
-- The PR link on an opened PR card opens the PR in your browser.
+- Each item is a card with a color bar for its section, a title (two lines at most), a status pill (for example working, held, merged) and a muted repo and detail line. A left click opens the card in place to show the full title and every fact the snapshot has. Click again to close it.
+- Section and card open or closed state survives a switch of space.
+- Refreshes every 30 seconds, or at once with the refresh button in the header. If a refresh fails, the last data stays, marked with its age, with one error line.
+- A PR card has a chip like "PR #12" with its repo; it opens the PR in your browser.
+- A section shows "Show N more" only when the snapshot left N items out, and "Show fewer" only after more rows came.
 - No dependencies and no build step.
 
 ## Install
