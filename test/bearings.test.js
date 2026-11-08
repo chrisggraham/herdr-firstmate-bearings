@@ -205,8 +205,36 @@ test("a landed card shows the repo from its task record, never from a URL", () =
 });
 
 test("the PR's repo and the snapshot repo come before the record repo", () => {
-  assert.equal(repoOf({ pr: { repo: "o/pr" }, repo: "o/snap" }, { repo: "rec" }), "o/pr");
-  assert.equal(repoOf({ repo: "o/snap" }, { repo: "rec" }), "o/snap");
+  assert.equal(repoOf({ pr: { repo: "o/pr" }, repo: "o/snap" }, { repo: "rec" }), "pr");
+  assert.equal(repoOf({ repo: "o/snap" }, { repo: "rec" }), "snap");
+});
+
+test("a card shows only the repo part of an owner/repo name, so every section matches", () => {
+  const prs = readBearings(JSON.stringify({ schema: "fm-bearings.v1", recorded_prs: [{ id: "t", url: "https://github.com/example/acme-api/pull/12" }] }));
+  assert.equal(repoOf(prs.sections[0].rows[0], undefined), "acme-api");
+  assert.equal(repoOf({ repo: "acme-api" }, undefined), "acme-api");
+});
+
+test("an opened PR card shows the id once and never repeats the PR chip, its URL or the pill", () => {
+  const url = "https://github.com/example/acme-api/pull/12";
+  const [row] = readBearings(JSON.stringify({ schema: "fm-bearings.v1", recorded_prs: [{ id: "t-1", url }] })).sections[0].rows;
+  const record = { id: "t-1", state: "in_flight", pr: "PR #12", links: `pr:${url}`, kind: "ship" };
+  assert.deepEqual(cardOf(row, record).fields, [["id", "t-1"], ["state", "in_flight"], ["links", `pr:${url}`], ["kind", "ship"]]);
+});
+
+test("a card drops a field that repeats the pill or the repo, whatever its key", () => {
+  const row = { title: "T", status: { text: "working", tone: "working" }, repo: "acme-api", facts: [] };
+  assert.deepEqual(cardOf(row, { id: "t-1", phase: "working", home: "acme-api", kind: "ship" }).fields, [["id", "t-1"], ["kind", "ship"]]);
+});
+
+test("a card drops a badge whose value another field already has, and keeps the id", () => {
+  const row = { title: "T", facts: [["Task", "t-1"], ["Owner", "bo"]] };
+  assert.deepEqual(cardOf(row, { kind: "ship", id: "t-1", name2: "ship" }).fields, [["kind", "ship"], ["id", "t-1"], ["Owner", "bo"]]);
+});
+
+test("yes, no and date values may repeat across fields", () => {
+  const record = { held: "yes", blocked: "yes", created: "2030-06-12", filed: "2030-06-12" };
+  assert.deepEqual(cardOf({ title: "T", facts: [] }, record).fields, Object.entries(record));
 });
 
 test("every task section's card gets the repo from its task record", () => {

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseTaskRecord } from "../mods/firstmate-bearings/toon.js";
 import { cardOf } from "../mods/firstmate-bearings/bearings.js";
-import { linkOf, relativeDate, typedFields } from "../mods/firstmate-bearings/fields.js";
+import { labelOf, linkOf, relativeDate, typedFields } from "../mods/firstmate-bearings/fields.js";
 
 const NOW = Date.UTC(2030, 5, 15, 23, 59);
 
@@ -25,6 +25,10 @@ test("short values are badges with the key as prefix", () => {
   const { badges, texts } = typedFields([["Kind", "ship"], ["Priority", "1"], ["Id", "abc-123"], ["Hold kind", "captain"]], NOW);
   assert.deepEqual(badges.map((b) => [b.prefix, b.text]), [["kind", "ship"], ["priority", "1"], ["id", "abc-123"], ["hold kind", "captain"]]);
   assert.deepEqual(texts, []);
+});
+
+test("a long-text label reads as words: body is Description, hold_reason is Hold reason", () => {
+  assert.deepEqual(["body", "hold_reason", "question", "doing"].map(labelOf), ["Description", "Hold reason", "Question", "Doing"]);
 });
 
 test("a date badge shows the relative date, with the full date as tooltip", () => {

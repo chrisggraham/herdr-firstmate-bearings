@@ -67,12 +67,27 @@ const fieldKey = (label) => label.toLowerCase().replace(/[^a-z0-9]/g, "");
 // Fields the card already shows in its own way, so the grid leaves them out: the repo line, and the card title (also named name, summary or what).
 const SHOWN_ELSEWHERE = new Set(["repo", "title", "name", "summary", "what"]);
 
-// Whether the card shows this field elsewhere: by key, as the status pill (and never the state "unknown"), or as the PR chip.
-function isShownElsewhere(row, [label, value]) {
+// Whether the card shows this field elsewhere: by key, as the status pill (and never the state "unknown"),
+// or by value, as the PR chip, its URL or the repo.
+function isShownElsewhere(row, [label, value], repo) {
   const key = fieldKey(label);
   if (SHOWN_ELSEWHERE.has(key)) return true;
   if (key === "state") return Boolean(row.status) || value === "unknown";
-  return Boolean(row.pr) && value === row.url;
+  return [row.status?.text, row.pr?.label, row.url, repo].includes(value);
+}
+
+// A yes or no value, or a date, repeats by nature, so two badges may share it.
+const REPEATABLE_VALUE = /^(yes|no|true|false|\d{4}-\d{2}-\d{2})$/;
+
+// Drops a field whose value an earlier field already shows. The id is kept, so it wins over a later copy.
+function withoutRepeatedValues(fields) {
+  const seen = new Set(fields.filter(([label]) => fieldKey(label) === "id").map(([, value]) => value));
+  return fields.filter(([label, value]) => {
+    if (fieldKey(label) === "id" || REPEATABLE_VALUE.test(value)) return true;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
 }
 
 // The title and fields an opened card shows. With a task record (from `fm-tasks-axi.sh show`),
@@ -80,18 +95,21 @@ function isShownElsewhere(row, [label, value]) {
 // fields the record does not already have. Fields with no value are left out.
 export function cardOf(row, record) {
   const recordFields = Object.entries(record ?? {}).filter(([, value]) => typeof value === "string");
-  const shown = new Set(recordFields.map(([key]) => fieldKey(key)));
-  const snapshotFields = row.facts.filter(([label]) => !shown.has(fieldKey(label)));
-  const fields = [...recordFields, ...snapshotFields].filter((field) => !isEmptyField(field[1]) && !isShownElsewhere(row, field));
+  const recordKeys = new Set(recordFields.map(([key]) => fieldKey(key)));
+  const snapshotFields = row.facts.filter(([label]) => !recordKeys.has(fieldKey(label)));
+  const repo = repoOf(row, record);
+  const shown = [...recordFields, ...snapshotFields].filter((field) => !isEmptyField(field[1]) && !isShownElsewhere(row, field, repo));
+  const fields = withoutRepeatedValues(shown);
   const title = record?.title ? stripCaptain(record.title) : row.title;
   return { title, fields };
 }
 
-// The repo a card shows: the PR's, then the snapshot row's, then the task record's.
+// The repo a card shows, without its owner: the PR's, then the snapshot row's, then the task record's.
 // A landed row has no repo in the snapshot, so its record gives it. A repo is never taken from a URL except a PR row's own.
 export function repoOf(row, record) {
   const recordRepo = isEmptyField(record?.repo) ? "" : record.repo;
-  return row.pr?.repo || row.repo || recordRepo;
+  const repo = row.pr?.repo || row.repo || recordRepo;
+  return repo.split("/").pop();
 }
 
 // A "backend ..." note means the snapshot could not see the task's terminal. That check
