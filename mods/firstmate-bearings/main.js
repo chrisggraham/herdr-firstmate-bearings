@@ -430,7 +430,7 @@ export default class FirstmateBearings extends View {
       .bg(t.raised).border_l(3).border_color(t.accent).cursor_pointer().hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => this.pick(home, cx))
       .child(h_flex().gap(8).items_center().child(div().flex_1().min_w(0).truncate().font_semibold().child(home.name))
-        .when(this.awayHomes.has(home.key), (el) => el.child(this.pill("☾ away", t.muted, t.hover))))
+        .when(this.awayHomes.has(home.key), (el) => el.child(this.pill("away", t.muted, t.hover, "away.svg"))))
       .when(Boolean(home.machine), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(home.machine)))
       .when(Boolean(counts), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(counts)));
   }
@@ -461,8 +461,9 @@ export default class FirstmateBearings extends View {
   }
 
   // A small rounded label: text in a color on a faint tint of the same color.
-  pill(text, color, background) {
-    return div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(background).text_size(10.5).font_semibold().text_color(color).child(text);
+  pill(text, color, background, icon) {
+    return div().flex_none().px(6).h(18).flex().items_center().gap(3).rounded(5).bg(background).text_size(10.5).font_semibold().text_color(color)
+      .when(icon, (el) => el.child(svg(`mods/firstmate-bearings/${icon}`).size(10).flex_none().text_color(color))).child(text);
   }
 
   statusPill(status, t) {
