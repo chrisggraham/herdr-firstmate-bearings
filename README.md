@@ -54,3 +54,5 @@ Pull this repo again. Herdr reloads the mod.
 - `npm test` runs `node --test`. There are no dependencies.
 - `herdr-app check mods/firstmate-bearings` checks the mod.
 - `docs/design.md` describes the data contract, discovery and display.
+
+An expanded card also shows small action buttons, only when its data proves the action is valid: **Done** (a hand task), **Defer** (a hold that is not deferred) and **Drop** in Waiting on you, **Stop** for a working task, and **Start now** for a queued item that is not blocked or held. Drop and Stop ask first. Each button sends one note, `[bearings panel] <action> <section> <item id>`, through the same inbox command; the panel runs nothing else. PR and Landed cards have Discuss only.

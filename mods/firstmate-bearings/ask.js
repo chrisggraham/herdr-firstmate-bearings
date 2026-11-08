@@ -5,8 +5,10 @@ export const MAX_ID_LENGTH = 64;
 
 const PREFIX = "[bearings panel] discuss";
 
+export const sanitizeId = (itemId) => String(itemId).replace(/\s+/g, "").slice(0, MAX_ID_LENGTH);
+
 export function noteBody(sectionId, itemId, typed) {
-  const id = String(itemId).replace(/\s+/g, "").slice(0, MAX_ID_LENGTH);
+  const id = sanitizeId(itemId);
   const text = String(typed).trim();
   const target = `${PREFIX} ${sectionId} ${id}`;
   return text ? `${target} - ${text}` : target;
