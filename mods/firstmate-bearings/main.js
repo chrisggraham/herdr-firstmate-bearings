@@ -278,7 +278,6 @@ export default class FirstmateBearings extends View {
     this.confirm = props().confirm;
     this.requestId = newRequestId();
     this.sending = false;
-    this.handle = null;
   }
 
   sendConfirmed(cx) {
@@ -296,27 +295,27 @@ export default class FirstmateBearings extends View {
     const t = theme();
     const { action, title } = this.confirm;
     const label = ACTIONS[action].label;
-    const button = (id, text, primary, run) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
-      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
-      .hover((s) => s.opacity(0.88)).on_click(run).child(text);
     return v_flex().id("firstmate-confirm").w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(div().text_size(14).font_semibold().child(`${label} ${title}?`))
       .child(h_flex().pt(20).gap(8).justify_end()
-        .child(button("confirm-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
-        .child(button("confirm-send", this.sending ? "Sending…" : label, true, (_e, cx) => this.sendConfirmed(cx))));
+        .child(this.dialogButton(t, "confirm-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
+        .child(this.dialogButton(t, "confirm-send", this.sending ? "Sending…" : label, true, (_e, cx) => this.sendConfirmed(cx))));
   }
 
   askKey(e, cx) {
     if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
   }
 
-  askView() {
-    const t = theme();
-    const button = (id, text, primary, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
+  // A dialog button: the primary one is filled, the other has an outline.
+  dialogButton(t, id, text, primary, run) {
+    return h_flex().id(id).h(32).px(14).items_center().rounded(8)
       .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
       .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
-      .hover((s) => s.opacity(0.88)).on_click(action).child(text);
+      .hover((s) => s.opacity(0.88)).on_click(run).child(text);
+  }
+
+  askView() {
+    const t = theme();
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Discuss with ${this.ask.homeName}`))
@@ -324,8 +323,8 @@ export default class FirstmateBearings extends View {
       .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
       .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
       .child(h_flex().pt(20).gap(8).justify_end()
-        .child(button("ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
-        .child(button("ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
+        .child(this.dialogButton(t, "ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
+        .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
   }
 
   render(cx) {
