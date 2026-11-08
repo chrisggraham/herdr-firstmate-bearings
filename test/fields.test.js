@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { parseTaskRecord } from "../mods/firstmate-bearings/toon.js";
+import { cardOf } from "../mods/firstmate-bearings/bearings.js";
 import { linkOf, relativeDate, typedFields } from "../mods/firstmate-bearings/fields.js";
 
 const NOW = Date.UTC(2030, 5, 15, 23, 59);
@@ -79,4 +81,32 @@ test("a link with no path is labeled by its host", () => {
 
 test("a URL the parser rejects is labeled by its own text", () => {
   assert.equal(linkOf("https://[bad").label, "https://[bad");
+});
+
+const LONG_BODY = "From https://example.com/acme/app/pull/25 'Not fixed': foreground service stopped before startForeground (possible crash); the silent server never sends an SSH greeting, so the connection hangs until the timeout and the user sees no error at all.";
+const RECORD_TEXT = `task:
+  id: queued-example
+  title: "Example: items the review left unfixed"
+  state: queued
+  blocked: no
+  held: no
+  kind: ship
+  repo: example-app
+  created: 2030-06-10
+  closed: "-"
+  deps: none
+  body: ${JSON.stringify(LONG_BODY)}
+`;
+
+test("a real-shaped record with a long body shows the body as a paragraph on the opened card", () => {
+  const row = { title: "Example: items…", facts: [["Filed", "2030-06-10"]] };
+  const card = cardOf(row, parseTaskRecord(RECORD_TEXT));
+  const { texts } = typedFields(card.fields, NOW);
+  assert.deepEqual(texts, [{ label: "body", value: LONG_BODY }]);
+});
+
+test("the Doing text of an in-flight card is a paragraph, even when short", () => {
+  const { texts, badges } = typedFields([["Doing", "tests green"]], NOW);
+  assert.deepEqual(texts, [{ label: "Doing", value: "tests green" }]);
+  assert.deepEqual(badges, []);
 });

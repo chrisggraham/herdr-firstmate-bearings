@@ -30,6 +30,10 @@ export const scriptPath = (home) => pathIn(home, SCRIPT);
 // This file exists in a Firstmate home while it is in away mode.
 export const awayPath = (home) => pathIn(home, "state/.afk");
 
+// Arguments for /bin/sh that run a script through the login shell, so the script finds the tools in the user's
+// PATH (a remote exec has a bare one). The script and its arguments are passed as separate arguments, never joined into a command string.
+export const loginShellArgs = (script, args) => ["-lc", 'exec "$0" "$@"', script, ...args];
+
 export const showPath = (home) => pathIn(home, "bin/fm-tasks-axi.sh");
 
 export const inboxPath = (home) => pathIn(home, "bin/fm-inbox.sh");

@@ -3,6 +3,9 @@
 
 export const MAX_ID_LENGTH = 64;
 
+// The words every Discuss control shows (tooltip, dialog title, send button), naming the Firstmate by its panel label.
+export const discussLabel = (homeName) => `Discuss with Firstmate (${homeName})`;
+
 const PREFIX = "[bearings panel] discuss";
 
 export const sanitizeId = (itemId) => String(itemId).replace(/\s+/g, "").slice(0, MAX_ID_LENGTH);
