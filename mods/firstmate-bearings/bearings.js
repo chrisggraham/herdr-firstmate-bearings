@@ -15,7 +15,7 @@ export const REVEAL_FLAGS = ["--all-decisions", "--all-landed"];
 const SECTIONS = [
   { id: "decisions", title: "Waiting on you", tone: "blocked", highlight: true, items: (b) => list(b.decisions_open), row: decisionRow },
   { id: "in-flight", title: "In flight", tone: "ansi4", items: (b) => list(b.in_flight), row: (t) => ({
-    title: t.name ?? t.id ?? "", detail: shownDoing(t.doing) ?? "", repo: t.repo, status: statusOf(t.state),
+    title: t.name ?? t.id ?? "", detail: "", repo: t.repo, status: statusOf(t.state),
     facts: facts({ Repo: t.repo, State: t.state, Doing: shownDoing(t.doing), Kind: t.kind, Id: t.id }) }) },
   { id: "prs", title: "PRs", tone: "ansi4", items: (b) => list(b.recorded_prs), row: prRow },
   { id: "secondmates", title: "Secondmates", tone: "dim", hasTask: false, items: (b) => list(b.secondmates), row: secondmateRow },
