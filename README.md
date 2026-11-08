@@ -22,7 +22,7 @@ The mod runs `bin/fm-bearings-snapshot.sh` from a Firstmate home on your machine
 
 1. Click **Firstmate** in the tab bar. The panel lists the Firstmates found in open tabs.
 2. Pick one. With exactly one found, the panel shows it at once.
-3. Click the name at the top to go back to the list.
+3. With more than one Firstmate, click the name box at the top (it has a chevron) to go back to the list. With one Firstmate, the panel opens it directly and shows no box.
 
 The pick is shared by every tab and is kept across restarts. A Firstmate is found when one of its panes is open in its home folder. A Firstmate with only a worker tab open is not found.
 
