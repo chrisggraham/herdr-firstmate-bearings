@@ -15,14 +15,23 @@ The panel sends notes to a Firstmate (Discuss) and runs actions (Done, Defer, Dr
 - Refresh button, and Collapse all or Expand all.
 - Card details come from the full task record.
 - Errors go to a log file.
+- Demo mode: a built-in sample Firstmate with invented data, for screenshots.
 - Settings in `config.json`.
 
 ## Install
 
 The mod runs `bin/fm-bearings-snapshot.sh` from a Firstmate home on your machines. Install it only if you want that.
 
+Paste this to your Herdr agent:
+
+```
+Install the Herdr mod from https://github.com/chrisggraham/herdr-firstmate-bearings
+```
+
+Or install it by hand:
+
 1. Copy or link `mods/firstmate-bearings` into `~/.config/herdr-app/mods/`.
-2. Add the **Firstmate** button and the panel block to your tab bar and layout. Give your Herdr agent the URL of this repo, or follow `RECIPE.md`.
+2. Add the **Firstmate** button and the panel block to your tab bar and layout. `RECIPE.md` has the exact edits.
 3. Check the mod: `herdr-app check ~/.config/herdr-app/mods/firstmate-bearings`
 
 ## Use
