@@ -1,10 +1,11 @@
-// A sidebar panel that shows the bearings of one open Firstmate. Read-only: it never
-// switches tabs and never changes Firstmate.
+// A sidebar panel that shows the bearings of one open Firstmate. It never switches tabs.
+// Right-click a row opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, exec, theme } from "herdr";
+import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { spaces, panes, exec, theme, props, openOverlay, closeOverlay, notify } from "herdr";
 import { findCandidates, listHomes, scriptPath } from "./homes.js";
 import { readBearings } from "./bearings.js";
+import { NOTE_SCRIPT, noteArgs, newRequestId } from "./ask.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
@@ -19,6 +20,7 @@ const firstLine = (text) => String(text).trim().split("\n")[0];
 
 export default class FirstmateBearings extends View {
   init(_props, cx) {
+    if (props()?.ask) return this.initAsk(cx);
     this.isHome = new Map();
     this.picked = localStorage.getItem(PICK_STORE);
     this.listOpen = false;
@@ -109,7 +111,68 @@ export default class FirstmateBearings extends View {
     cx.notify();
   }
 
+  // The dialog: one text input, Cancel and Send. It runs no timers and no discovery.
+  initAsk(cx) {
+    this.ask = props().ask;
+    this.requestId = newRequestId();
+    this.text = "";
+    this.sending = false;
+    this.input = InputState.new({ value: "" });
+    this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
+    this.input.on("submit", (_e, cx) => this.send(cx));
+    this.input.focus();
+    cx.timer.after(600, () => this.input.focus());
+    this.handle = cx.focus_handle();
+  }
+
+  openAsk(home, sectionId, itemId) {
+    const ask = { machine: home.machine, folder: home.folder, homeName: home.name, sectionId, itemId };
+    openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
+  }
+
+  send(cx) {
+    if (this.sending) return;
+    this.sending = true;
+    const { machine, folder, homeName, sectionId, itemId } = this.ask;
+    const script = `${folder.replace(/\/+$/, "")}/${NOTE_SCRIPT}`;
+    cx.spawn(async (cx) => {
+      try {
+        const result = await exec(script, noteArgs(this.requestId, sectionId, itemId, this.text), { on: machine });
+        if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
+        notify({ title: `Sent to ${homeName}`, level: "success" });
+        closeOverlay(props().overlay);
+      } catch (e) {
+        notify({ title: `Could not send to ${homeName}`, body: firstLine(e.message ?? e), level: "error" });
+      } finally {
+        this.sending = false;
+        cx.notify();
+      }
+    });
+  }
+
+  askKey(e, cx) {
+    if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
+  }
+
+  askView(cx) {
+    const t = theme();
+    const button = (id, text, primary, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
+      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
+      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
+      .hover((s) => s.opacity(0.88)).on_click(action).child(text);
+    return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
+      .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
+      .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Ask ${this.ask.homeName} about this`))
+        .child(div().text_size(11).text_color(t.dim).child("Esc")))
+      .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
+      .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(h_flex().pt(20).gap(8).justify_end()
+        .child(button("ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
+        .child(button("ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
+  }
+
   render(cx) {
+    if (this.ask) return this.askView(cx);
     const t = theme();
     const candidates = findCandidates(spaces(), panes());
     this.discover(candidates, cx);
@@ -190,6 +253,7 @@ export default class FirstmateBearings extends View {
   rowView(sectionId, row, index, t) {
     const line = h_flex().id(`row-${sectionId}-${index}`).h(24).flex_none().pl(33).pr(14).items_center()
       .text_size(12).text_color(row.flagged ? t.blocked : t.muted)
+      .on_mouse_down("right", () => this.openAsk(this.home, sectionId, row.itemId))
       .child(div().flex_1().min_w(0).truncate().child(row.text));
     if (!row.url) return line;
     return line.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => cx.open_url(row.url));
