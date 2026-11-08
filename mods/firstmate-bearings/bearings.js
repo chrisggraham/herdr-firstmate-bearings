@@ -3,7 +3,7 @@
 export const SCHEMA = "fm-bearings.v1";
 
 const list = (value) => (Array.isArray(value) ? value : []);
-const joinParts = (...parts) => parts.filter(Boolean).join(" · ");
+const joinParts = (...parts) => parts.filter((part) => part && part !== "-").join(" · ");
 
 // Each row is a card: a title, a muted detail line, an optional muted `repo` label and status pill,
 // and the facts the card shows when opened. A PR row has `pr` (the chip) and `url` (where it opens).
@@ -22,7 +22,7 @@ const SECTIONS = [
 ];
 
 const STATUS_TONES = { working: "working", blocked: "blocked", paused: "idle", held: "idle", merged: "done", done: "done" };
-const statusOf = (text) => (hasValue(text) ? { text, tone: STATUS_TONES[text] ?? "muted" } : undefined);
+const statusOf = (text) => (hasValue(text) && text !== "unknown" ? { text, tone: STATUS_TONES[text] ?? "muted" } : undefined);
 const hasValue = (value) => Boolean(value) && value !== "-";
 
 // "(main)" is the snapshot's placeholder owner, not a name.
