@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { noteBody, noteArgs, newRequestId, MAX_ID_LENGTH } from "../mods/firstmate-bearings/ask.js";
+import { noteBody, noteArgs, newRequestId, MAX_ID_LENGTH, discussLabel } from "../mods/firstmate-bearings/ask.js";
 
 test("the note names the section, the item id and the typed text", () => {
   assert.equal(noteBody("in-flight", "t-1", "why is this slow?"), "[bearings panel] discuss in-flight t-1 - why is this slow?");
@@ -32,4 +32,8 @@ test("request ids are safe words and differ between calls", () => {
   const first = newRequestId();
   assert.match(first, /^bearings-[a-z0-9]+-[a-z0-9]+$/);
   assert.notEqual(first, newRequestId());
+});
+
+test("the Discuss label names the Firstmate by its panel label", () => {
+  assert.equal(discussLabel("Workspace/example"), "Discuss with Firstmate (Workspace/example)");
 });

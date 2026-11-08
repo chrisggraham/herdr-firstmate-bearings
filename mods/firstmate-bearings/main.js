@@ -3,11 +3,11 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile, shared, setShared } from "herdr";
-import { awayPath, findCandidates, inboxPath, listHomes, needsCheck, scriptPath, showPath } from "./homes.js";
+import { awayPath, findCandidates, inboxPath, listHomes, loginShellArgs, needsCheck, scriptPath, showPath } from "./homes.js";
 import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings } from "./bearings.js";
-import { dropGoneRecords, keysToFetch } from "./records.js";
+import { dropGoneRecords, keysToFetch, retryFailedRecords } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
-import { noteArgs, newRequestId } from "./ask.js";
+import { discussLabel, noteArgs, newRequestId } from "./ask.js";
 import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
 import { typedFields } from "./fields.js";
@@ -156,7 +156,7 @@ export default class FirstmateBearings extends View {
     cx.spawn(async (cx) => {
       try {
         const config = readConfig(await readTextFile(`${appHome()}/mods/firstmate-bearings/config.json`).catch(() => null));
-        const result = await exec(scriptPath(home), ["--json", ...REVEAL_FLAGS], { on: home.machine });
+        const result = await exec("/bin/sh", loginShellArgs(scriptPath(home), ["--json", ...REVEAL_FLAGS]), { on: home.machine });
         if (isAwayRefusal(result.code, result.stderr)) {
           this.awayHomes.add(home.key);
           if (this.home?.key === home.key) Object.assign(this, { away: true, error: null });
@@ -181,12 +181,13 @@ export default class FirstmateBearings extends View {
   }
 
   // Fetches the full record of each task id that has none yet, a few at a time. An id is marked
-  // as fetched before the call, so no id is asked for twice; a failed call leaves an empty record.
+  // as fetched before the call, so no id is asked for twice at once; a failed call leaves an empty record
+  // marked failed, which is fetched again after RETRY_MS or on a click of the refresh button.
   fetchRecords(home, keys, cx) {
     const cache = this.records.get(home.key) ?? new Map();
     this.records.set(home.key, cache);
     dropGoneRecords(keys, cache);
-    const queue = keysToFetch(keys, cache);
+    const queue = keysToFetch(keys, cache, Date.now());
     if (queue.length === 0) return;
     for (const { id, signature } of queue) cache.set(id, { signature, record: {} });
     const worker = async () => {
@@ -200,11 +201,12 @@ export default class FirstmateBearings extends View {
 
   async fetchRecord(home, { id, signature }, cache) {
     try {
-      const result = await exec(showPath(home), ["show", id, "--full"], { on: home.machine });
+      const result = await exec("/bin/sh", loginShellArgs(showPath(home), ["show", id, "--full"]), { on: home.machine });
       if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
       if (cache.get(id)?.signature === signature) cache.set(id, { signature, record: parseTaskRecord(result.stdout) });
     } catch (e) {
       this.logError("show", e);
+      if (cache.get(id)?.signature === signature) cache.set(id, { signature, record: {}, failedAt: Date.now() });
     }
   }
 
@@ -233,6 +235,8 @@ export default class FirstmateBearings extends View {
 
   // A click on the refresh button fetches at once; a fetch that is running ignores it.
   refresh(cx) {
+    const cache = this.records.get(this.home?.key);
+    if (cache) retryFailedRecords(cache);
     this.fetch(cx);
     cx.notify();
   }
@@ -374,14 +378,14 @@ export default class FirstmateBearings extends View {
     if (this.sent) return this.sentView(t, `Sent to ${this.ask.homeName}`);
     return v_flex().id("firstmate-ask").track_focus(this.handle).on_key_down((e, cx) => this.askKey(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(`Discuss with ${this.ask.homeName}`))
+      .child(h_flex().items_center().child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().child(discussLabel(this.ask.homeName)))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(14).pb(7).text_size(11.5).text_color(t.dim).child("Your note (optional)"))
       .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(t.accent).bg(t.background).text_size(12.8).text_color(t.foreground))
       .children([this.failureLine(t)].filter(Boolean))
       .child(h_flex().pt(20).gap(8).justify_end()
         .child(this.dialogButton(t, "ask-cancel", "Cancel", false, () => closeOverlay(props().overlay)))
-        .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : "Send", true, (_e, cx) => this.send(cx))));
+        .child(this.dialogButton(t, "ask-send", this.sending ? "Sending…" : discussLabel(this.ask.homeName), true, (_e, cx) => this.send(cx))));
   }
 
   render(cx) {
@@ -520,12 +524,12 @@ export default class FirstmateBearings extends View {
   rowView(section, row, index, t) {
     const id = `${section.id}-${index}-${row.title}`;
     const open = this.expanded.has(id);
-    const record = this.records.get(this.home.key)?.get(row.itemId)?.record;
-    const card = cardOf(row, record);
+    const entry = this.records.get(this.home.key)?.get(row.itemId);
+    const card = cardOf(row, entry?.record);
     const title = div().flex_1().min_w(0).text_size(12.5).line_height("17px").font_medium().text_color(row.flagged ? t.blocked : t.foreground)
       .when(!open, (el) => el.truncate()).child(card.title);
     const discuss = h_flex().id(`ask-${id}`).size(22).flex_none().items_center().justify_center().rounded(6)
-      .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip("Discuss with Firstmate")
+      .text_color(t.muted).cursor_pointer().hover((s) => s.text_color(t.accent).bg(t.hover)).tooltip(discussLabel(this.home.name))
       .on_click((_e, cx) => { cx.stop_propagation(); this.openAskDialog(section.id, row.itemId); })
       .child(svg("mods/firstmate-bearings/ask.svg").size(13).flex_none());
     const top = h_flex().id(`row-${id}`).gap(8).items_start().cursor_pointer().on_click((_e, cx) => this.toggleCard(id, cx))
@@ -535,6 +539,7 @@ export default class FirstmateBearings extends View {
     const meta = this.metaLine(row, t);
     const typed = open ? typedFields(card.fields, Date.now()) : null;
     return view.when(Boolean(meta), (el) => el.child(meta)).children(open ? this.fieldRows(typed, t) : [])
+      .when(open && entry?.failedAt !== undefined, (el) => el.child(div().text_size(10.5).text_color(t.dim).child("Details unavailable")))
       .when(open, (el) => el.child(this.footerRow(section, row, id, typed.links, discuss, t)));
   }
 

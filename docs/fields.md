@@ -45,7 +45,7 @@ Top-level keys the panel does not read: `schema` (enum, `fm-bearings.v1`; the pa
 | `state` | enum (`working`, `paused`, `done`) | Worker state | `working` | Status pill |
 | `repo` | text | Repository name | `example-repo` | Repo label |
 | `name` | text | Task title | `Add a search box` | Card title |
-| `doing` | text | What the worker does now | `tests green on branch` | Detail line (notes that start with `backend` are hidden) |
+| `doing` | text | What the worker does now | `tests green on branch` | Detail line, and the text field "Doing" on the opened card (notes that start with `backend` are hidden) |
 
 ### `recorded_prs` item
 

@@ -6,7 +6,7 @@ import { prChip } from "./bearings.js";
 import { splitUrls } from "./urls.js";
 
 // Fields that are always long free text, however short one value is.
-const TEXT_KEYS = new Set(["holdreason", "question", "body", "reason"]);
+const TEXT_KEYS = new Set(["holdreason", "question", "body", "reason", "doing"]);
 const DATE_KEYS = new Set(["filed", "created", "closed", "holduntil"]);
 const MAX_BADGE_LENGTH = 40;
 const DAY_MS = 24 * 60 * 60 * 1000;

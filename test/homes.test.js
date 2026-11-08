@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findCandidates, homeKey, homeName, listHomes, awayPath, needsCheck, scriptPath } from "../mods/firstmate-bearings/homes.js";
+import { findCandidates, homeKey, homeName, listHomes, awayPath, needsCheck, scriptPath, loginShellArgs } from "../mods/firstmate-bearings/homes.js";
 
 // Two spaces on this computer (one named) and one unnamed space on machine "build-box".
 const spaces = [
@@ -61,4 +61,9 @@ test("the script path joins the folder and the script", () => {
 
 test("the away marker is the .afk file in the state folder", () => {
   assert.equal(awayPath({ folder: "/work/crew/" }), "/work/crew/state/.afk");
+});
+
+test("the login shell gets the script and each argument as separate arguments, never joined into a command", () => {
+  const args = loginShellArgs("/home/x/bin/fm-tasks-axi.sh", ["show", "t; rm -rf /", "--full"]);
+  assert.deepEqual(args, ["-lc", 'exec "$0" "$@"', "/home/x/bin/fm-tasks-axi.sh", "show", "t; rm -rf /", "--full"]);
 });
