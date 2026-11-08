@@ -32,7 +32,8 @@ A **Firstmate** button in the tab bar opens a sidebar panel. The panel lists ope
 ## Watch out
 
 - A Firstmate with no pane in its home folder is not found.
-- Open or closed state of the panel is the tab bar's, not the mod's.
+- Open or closed state of the panel is the tab bar's, not the mod's. The tab bar remembers it per space only for ids in the shared `workspace.panels` list. The mod appends `firstmate-bearings` to that list when the panel first loads, and removes nothing. If the panel still closes when you return to a space, add `"firstmate-bearings"` to `workspace.panels` in `shared.json` in the Herdr config folder, with Herdr closed.
+- The panel is one panel for the whole window, shown or hidden per space. The tab bar has no setting to keep it open in every space like the left sidebar.
 - The mod never reads Firstmate's `state/` or `data/`, and never uses the snapshot's `home` field.
 
 ## Done when
