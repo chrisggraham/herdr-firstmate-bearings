@@ -52,10 +52,16 @@ test("empty sections are left out by default and kept when asked", () => {
   assert.equal(readBearings(text, { hideEmpty: false }).sections.length, 6);
 });
 
-test("a row has a title, a detail line, a repo label and a status pill", () => {
+test("an in-flight card shows the Doing text once, as a field and not as the detail", () => {
+  const text = JSON.stringify({ schema: "fm-bearings.v1", in_flight: [{ id: "t", name: "Task", doing: "PR https://github.com/o/r/pull/7 checks green" }] });
+  const [row] = readBearings(text).sections[0].rows;
+  assert.equal(row.detail, "");
+  assert.deepEqual(row.facts.filter(([k]) => k === "Doing"), [["Doing", "PR https://github.com/o/r/pull/7 checks green"]]);
+});
+
+test("a row has a title, a repo label and a status pill", () => {
   const rows = readBearings(fixture).sections.find((s) => s.id === "in-flight").rows;
   assert.equal(rows[0].title, "Add widget cache");
-  assert.equal(rows[0].detail, "writing tests");
   assert.equal(rows[0].repo, "example/widgets");
   assert.deepEqual(rows.map((r) => r.status), [{ text: "working", tone: "working" }, { text: "paused", tone: "idle" }]);
 });
