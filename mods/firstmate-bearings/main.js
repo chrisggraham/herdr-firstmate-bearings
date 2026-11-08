@@ -2,10 +2,12 @@
 // openAskDialog opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, exec, theme, props, openOverlay, closeOverlay, notify } from "herdr";
+import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile } from "herdr";
 import { findCandidates, inboxPath, listHomes, scriptPath } from "./homes.js";
 import { readBearings } from "./bearings.js";
 import { noteArgs, newRequestId } from "./ask.js";
+import { readConfig } from "./config.js";
+import { LOG_FILE, formatLine, appendLine } from "./log.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
@@ -16,6 +18,9 @@ const ago = (ms) => {
   return seconds < 60 ? `${seconds}s ago` : `${Math.round(seconds / 60)}m ago`;
 };
 
+// A remote machine answers only once its layout is ready; asking sooner fails.
+const machineReady = (machine) => machine === null || machines().some((m) => m.name === machine && m.layout === "ready");
+
 const firstLine = (text) => String(text).trim().split("\n")[0];
 
 export default class FirstmateBearings extends View {
@@ -25,6 +30,8 @@ export default class FirstmateBearings extends View {
     this.picked = localStorage.getItem(PICK_STORE);
     this.listOpen = false;
     this.collapsed = new Set();
+    this.expanded = new Set();
+    this.logging = Promise.resolve();
     this.shown = null;
     this.running = null;
     this.reveal = [];
@@ -32,10 +39,21 @@ export default class FirstmateBearings extends View {
     cx.timer.every(CLOCK_EVERY_MS, (cx) => cx.notify());
   }
 
+  // Adds one line to the log file in the Herdr app folder and to the app log. Never throws.
+  logError(source, error) {
+    const line = formatLine(new Date(), source, error);
+    console.log(`firstmate-bearings ${line}`);
+    const path = `${appHome()}/${LOG_FILE}`;
+    this.logging = this.logging.then(async () => {
+      const before = await readTextFile(path);
+      await writeTextFile(path, appendLine(before, line), before);
+    }).catch(() => {});
+  }
+
   // Finds out which candidate folders are Firstmate homes; each pair is checked once.
   discover(candidates, cx) {
     for (const candidate of candidates) {
-      if (this.isHome.has(candidate.key)) continue;
+      if (this.isHome.has(candidate.key) || !machineReady(candidate.machine)) continue;
       this.isHome.set(candidate.key, false);
       cx.spawn(async (cx) => {
         const found = await this.hasScript(candidate);
@@ -49,7 +67,8 @@ export default class FirstmateBearings extends View {
     try {
       const result = await exec("test", ["-x", scriptPath(candidate)], { on: candidate.machine });
       return result.code === 0;
-    } catch {
+    } catch (e) {
+      this.logError("discover", e);
       return false;
     }
   }
@@ -63,7 +82,11 @@ export default class FirstmateBearings extends View {
   // Starts a fresh fetch when the shown Firstmate changes.
   follow(home, cx) {
     const key = home?.key ?? null;
-    if (key === this.shown) return;
+    // A remote machine that was not ready at the first fetch is tried again as soon as it is.
+    if (key === this.shown) {
+      if (home && !this.data && !this.error) this.fetch(cx);
+      return;
+    }
     this.shown = key;
     this.home = home;
     this.data = null;
@@ -82,16 +105,18 @@ export default class FirstmateBearings extends View {
 
   fetch(cx) {
     const home = this.home;
-    if (!home || this.running === home.key) return;
+    if (!home || this.running === home.key || !machineReady(home.machine)) return;
     this.running = home.key;
     const reveal = this.reveal;
     cx.spawn(async (cx) => {
       try {
+        const config = readConfig(await readTextFile(`${appHome()}/mods/firstmate-bearings/config.json`).catch(() => null));
         const result = await exec(scriptPath(home), ["--json", ...this.reveal], { on: home.machine });
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
-        const bearings = readBearings(result.stdout);
+        const bearings = readBearings(result.stdout, { hideEmpty: config.hideEmptySections });
         if (this.home?.key === home.key && this.reveal === reveal) Object.assign(this, { data: bearings, error: null, updated: Date.now() });
       } catch (e) {
+        this.logError("fetch", e);
         if (this.home?.key === home.key) this.error = firstLine(e.message ?? e);
       } finally {
         if (this.running === home.key) this.running = null;
@@ -218,7 +243,7 @@ export default class FirstmateBearings extends View {
   }
 
   noteLines(t) {
-    const texts = [this.data?.unsupported, this.data?.health].filter(Boolean);
+    const texts = [this.data?.unsupported].filter(Boolean);
     return texts.map((text) => div().px(14).py(6).text_size(12).text_color(t.muted).child(text));
   }
 
@@ -251,11 +276,23 @@ export default class FirstmateBearings extends View {
     return v_flex().flex_none().child(header).children(rows);
   }
 
+  // A card shows its title (up to two lines) and a muted detail line. A left click opens it
+  // to the full title and every fact; the PR link on an opened card opens the PR.
   rowView(sectionId, row, index, t) {
-    const line = h_flex().id(`row-${sectionId}-${index}`).h(24).flex_none().pl(33).pr(14).items_center()
-      .text_size(12).text_color(row.flagged ? t.blocked : t.muted)
-      .child(div().flex_1().min_w(0).truncate().child(row.text));
-    if (!row.url) return line;
-    return line.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => cx.open_url(row.url));
+    const id = `${sectionId}-${index}-${row.title}`;
+    const open = this.expanded.has(id);
+    const card = v_flex().id(`row-${id}`).flex_none().mx(10).mt(6).px(10).py(7).gap(2).rounded(8)
+      .bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => { if (!this.expanded.delete(id)) this.expanded.add(id); cx.notify(); })
+      .child(div().text_size(13).font_semibold().text_color(row.flagged ? t.blocked : t.foreground)
+        .when(!open, (el) => el.max_h(36).overflow_hidden()).child(row.title));
+    if (!open) return card.when(Boolean(row.detail), (el) => el.child(div().text_size(11.5).text_color(t.muted).truncate().child(row.detail)));
+    const lines = [row.detail, ...row.facts].filter(Boolean).map((text) => div().text_size(11.5).text_color(t.muted).child(text));
+    const link = div().id(`link-${id}`).text_size(11.5).text_color(t.accent).cursor_pointer()
+      .on_click((_e, cx) => cx.open_url(row.url)).child(row.url);
+    const ask = h_flex().id(`ask-${id}`).mt(4).h(26).px(10).items_center().justify_center().rounded(6).border_1().border_color(t.border)
+      .text_size(12).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.selected))
+      .on_click(() => this.openAskDialog(sectionId, row.itemId)).child("Ask Firstmate");
+    return card.children(lines).when(Boolean(row.url), (el) => el.child(link)).child(ask);
   }
 }

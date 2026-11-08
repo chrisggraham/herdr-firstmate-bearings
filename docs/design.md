@@ -28,16 +28,22 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 
 ## Display
 
-Switcher, "updated 12s ago", then collapsible sections with counts (collapsed state in memory only), one truncated line per item:
+Switcher, "updated 12s ago", then collapsible sections with counts (collapsed and opened state in memory only). A section with no items is hidden unless `hideEmptySections` is `false` in `config.json`.
 
-1. **Waiting on you**: `decisions_open[].summary`, highlighted above zero.
-2. **In flight**: `in_flight[]` name, state, doing.
-3. **PRs**: `recorded_prs[]` id and URL. A click calls `cx.open_url(url)`.
+Each item is a card: a title (two lines at most), a muted detail line, and a subtle background. A left click opens the card in place to the full title and every fact the snapshot has for it; a second click closes it. Right-click is left free.
+
+1. **Waiting on you**: `decisions_open[]` summary; opened, the question, key and owner. Highlighted above zero.
+2. **In flight**: `in_flight[]` name; detail is repo, state, doing.
+3. **PRs**: `recorded_prs[]` titled by the task it belongs to; detail is the URL. The opened card has the PR link, which calls `cx.open_url(url)`.
 4. **Secondmates**: `secondmates[]` id, state, freshness. Unreadable ones (freshness `unavailable`) are flagged.
-5. **Queued**: `gates[].title`.
-6. **Landed**: `landed[].what`.
+5. **Queued**: `gates[]` title; opened, blocker, reason, owner, filed date.
+6. **Landed**: `landed[]` what; opened, owner and artifact.
 
-A muted line in plain words names each secondmate task with no running agent when `unhealthy_endpoints` is non-empty; it is not an alarm. Not shown: `reports`, `contributions`, `candidate_prs`.
+`unhealthy_endpoints` and the snapshot's "backend ..." notes are not shown. The snapshot checks each task's terminal through the terminal socket. That check can fail when the snapshot runs through the app on another machine, so it would show false alarms. Not shown: `reports`, `contributions`, `candidate_prs`.
+
+## Errors and settings
+
+Caught errors are logged to `firstmate-bearings.log` in the app folder (time, place, first line of the message; newest 200 lines). A remote machine is not asked anything until its layout is ready. `config.json` holds one setting, `hideEmptySections` (default true).
 
 ## Not built
 
