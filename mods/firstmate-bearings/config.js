@@ -1,6 +1,6 @@
 // Reads config.json. Pure: no Herdr calls.
 
-export const DEFAULTS = { hideEmptySections: true };
+export const DEFAULTS = { hideEmptySections: true, demo: false };
 
 // A missing, unreadable or wrong-typed value gives the default. Never throws.
 export function readConfig(text) {
@@ -10,6 +10,6 @@ export function readConfig(text) {
   } catch {
     return { ...DEFAULTS };
   }
-  const hide = parsed?.hideEmptySections;
-  return { hideEmptySections: typeof hide === "boolean" ? hide : DEFAULTS.hideEmptySections };
+  const flag = (name) => (typeof parsed?.[name] === "boolean" ? parsed[name] : DEFAULTS[name]);
+  return { hideEmptySections: flag("hideEmptySections"), demo: flag("demo") };
 }

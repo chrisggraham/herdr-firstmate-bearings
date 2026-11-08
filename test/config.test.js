@@ -15,3 +15,10 @@ test("text that is not JSON, or a wrong type, gives the default", () => {
   assert.equal(readConfig("not json").hideEmptySections, true);
   assert.equal(readConfig('{ "hideEmptySections": "no" }').hideEmptySections, true);
 });
+
+test("demo is off by default and only a boolean turns it on", () => {
+  assert.equal(readConfig("{}").demo, false);
+  assert.equal(readConfig(null).demo, false);
+  assert.equal(readConfig('{ "demo": true }').demo, true);
+  assert.equal(readConfig('{ "demo": "yes" }').demo, false);
+});

@@ -12,6 +12,7 @@ import { ACTIONS, actionArgs, actionsFor } from "./actions.js";
 import { splitUrls } from "./urls.js";
 import { typedFields } from "./fields.js";
 import { readConfig } from "./config.js";
+import { DEMO_HOME, demoBearings } from "./demo.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { withPanel } from "./panels.js";
 import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
@@ -51,6 +52,7 @@ export default class FirstmateBearings extends View {
     this.away = false;
     this.awayHomes = new Set();
     this.homes = [];
+    this.config = readConfig(null);
     this.picked = localStorage.getItem(PICK_STORE);
     this.listOpen = false;
     // Kept in storage: the panel is built again when the person switches spaces and comes back.
@@ -64,7 +66,17 @@ export default class FirstmateBearings extends View {
     this.shown = null;
     this.running = null;
     cx.timer.every(FETCH_EVERY_MS, (cx) => { this.fetch(cx); this.checkAway(cx); });
-    cx.timer.every(CLOCK_EVERY_MS, (cx) => cx.notify());
+    this.reloadConfig(cx);
+    cx.timer.every(CLOCK_EVERY_MS, (cx) => { this.reloadConfig(cx); cx.notify(); });
+  }
+
+  async loadConfig() {
+    this.config = readConfig(await readTextFile(`${appHome()}/mods/firstmate-bearings/config.json`).catch(() => null));
+  }
+
+  // Reads config.json again, so a change to the demo setting shows within a few seconds.
+  reloadConfig(cx) {
+    cx.spawn(async (cx) => { await this.loadConfig(); cx.notify(); });
   }
 
   // Adds one line to the log file in the Herdr app folder and to the app log. Never throws.
@@ -93,8 +105,16 @@ export default class FirstmateBearings extends View {
     }
   }
 
+  // The Firstmates found in the open panes.
+  discoverHomes(cx) {
+    const candidates = findCandidates(spaces(), panes());
+    this.discover(candidates, cx);
+    return listHomes(candidates, this.checks);
+  }
+
   // One cheap test per Firstmate: its state/.afk file exists while it is in away mode.
   checkAway(cx) {
+    if (this.config.demo) return;
     for (const home of this.homes) {
       if (!machineReady(home.machine)) continue;
       cx.spawn(async (cx) => {
@@ -151,11 +171,12 @@ export default class FirstmateBearings extends View {
 
   fetch(cx) {
     const home = this.home;
+    if (home?.demo) return this.showDemo(home, cx);
     if (!home || this.running === home.key || !machineReady(home.machine)) return;
     this.running = home.key;
     cx.spawn(async (cx) => {
       try {
-        const config = readConfig(await readTextFile(`${appHome()}/mods/firstmate-bearings/config.json`).catch(() => null));
+        await this.loadConfig();
         const result = await exec("/bin/sh", loginShellArgs(scriptPath(home), ["--json", ...REVEAL_FLAGS]), { on: home.machine });
         if (isAwayRefusal(result.code, result.stderr)) {
           this.awayHomes.add(home.key);
@@ -163,7 +184,7 @@ export default class FirstmateBearings extends View {
           return;
         }
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
-        const bearings = readBearings(result.stdout, { hideEmpty: config.hideEmptySections });
+        const bearings = readBearings(result.stdout, { hideEmpty: this.config.hideEmptySections });
         if (this.home?.key === home.key) {
           Object.assign(this, { data: bearings, error: null, away: false, updated: Date.now() });
           this.awayHomes.delete(home.key);
@@ -178,6 +199,17 @@ export default class FirstmateBearings extends View {
         cx.notify();
       }
     });
+  }
+
+  // Demo mode: the sample Firstmate's bearings and records come from demo.js. Nothing runs and nothing is written.
+  showDemo(home, cx) {
+    const { snapshot, records } = demoBearings(Date.now());
+    const bearings = readBearings(JSON.stringify(snapshot), { hideEmpty: this.config.hideEmptySections });
+    Object.assign(this, { data: bearings, error: null, away: false, updated: Date.now() });
+    this.counts.set(home.key, bearings.counts);
+    const cache = new Map(bearings.records.map(({ id, signature }) => [id, { signature, record: records[id] ?? {} }]));
+    this.records.set(home.key, cache);
+    cx.notify();
   }
 
   // Fetches the full record of each task id that has none yet, a few at a time. An id is marked
@@ -260,12 +292,13 @@ export default class FirstmateBearings extends View {
   // The way in for the panel: call this from the discuss button of an expanded card.
   openAskDialog(sectionId, itemId) {
     const home = this.home;
-    const ask = { machine: home.machine, folder: home.folder, homeName: home.name, sectionId, itemId };
+    const ask = { machine: home.machine, folder: home.folder, homeName: home.name, demo: home.demo, sectionId, itemId };
     openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { ask } });
   }
 
   // Sends one note to a Firstmate and shows a toast. Returns null when the note was sent, else the error text.
-  async deliver({ machine, folder, homeName }, args, sent) {
+  async deliver({ machine, folder, homeName, demo }, args, sent) {
+    if (demo) return null;
     try {
       const result = await exec(inboxPath({ machine, folder }), args, { on: machine });
       if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
@@ -299,7 +332,7 @@ export default class FirstmateBearings extends View {
   // A button of a card: Drop and Stop ask first, the others send at once.
   runAction(action, section, row, cx) {
     const home = this.home;
-    const target = { machine: home.machine, folder: home.folder, homeName: home.name };
+    const target = { machine: home.machine, folder: home.folder, homeName: home.name, demo: home.demo };
     if (ACTIONS[action].confirm) {
       const confirm = { ...target, action, sectionId: section.id, itemId: row.itemId, title: row.title || row.itemId };
       openOverlay({ mod: "firstmate-bearings", kind: "dialog", width: 380, props: { confirm } });
@@ -392,9 +425,7 @@ export default class FirstmateBearings extends View {
     if (this.ask) return this.askView();
     if (this.confirm) return this.confirmView();
     const t = theme();
-    const candidates = findCandidates(spaces(), panes());
-    this.discover(candidates, cx);
-    const homes = listHomes(candidates, this.checks);
+    const homes = this.config.demo ? [DEMO_HOME] : this.discoverHomes(cx);
     const keys = (list) => list.map((h) => h.key).join("|");
     const changed = keys(homes) !== keys(this.homes);
     this.homes = homes;

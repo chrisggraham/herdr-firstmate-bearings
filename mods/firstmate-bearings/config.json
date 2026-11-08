@@ -1,3 +1,4 @@
 {
-  "hideEmptySections": true
+  "hideEmptySections": true,
+  "demo": false
 }
