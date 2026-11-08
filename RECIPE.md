@@ -1,8 +1,10 @@
-# Firstmate Bearings: recipe
+# Firstmate Bearings
 
-This recipe builds the mod, or installs it from this repo, for a Herdr agent.
+Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the bearings of a [Firstmate](https://github.com/kunchenguid/firstmate) that is open in any tab.
 
 ![Firstmate Bearings](preview.png)
+
+This recipe builds the mod, or installs it from this repo, for a Herdr agent.
 
 ## What you see
 
