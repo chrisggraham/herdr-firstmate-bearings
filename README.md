@@ -2,6 +2,8 @@
 
 Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the bearings of a [Firstmate](https://github.com/kunchenguid/firstmate) that is open in any tab.
 
+![Firstmate Bearings](preview.png)
+
 The panel sends notes to a Firstmate (Discuss) and runs actions (Done, Defer, Drop, Stop, Start now) through that Firstmate's inbox, with `bin/fm-inbox.sh note`.
 
 ## Features
@@ -25,7 +27,9 @@ The mod runs `bin/fm-bearings-snapshot.sh` from a Firstmate home on your machine
 Paste this to your Herdr agent:
 
 ```
-Install the Herdr mod from https://github.com/chrisggraham/herdr-firstmate-bearings
+Read ~/.config/herdr-app/AGENTS.md,
+then add this mod:
+herdr.dev/mods/chrisggraham/herdr-firstmate-bearings
 ```
 
 Or install it by hand:

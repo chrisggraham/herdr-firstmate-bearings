@@ -2,6 +2,8 @@
 
 This recipe builds the mod, or installs it from this repo, for a Herdr agent.
 
+![Firstmate Bearings](preview.png)
+
 ## What you see
 
 A **Firstmate** button in the tab bar opens a sidebar panel. The panel lists open Firstmates, then shows the picked one's bearings: a header (back arrow, name, "updated Ns ago", Collapse all, refresh), then six collapsible sections with counts.
