@@ -32,3 +32,7 @@ test("an empty or non-string value gives no link", () => {
   assert.deepEqual(splitUrls(""), []);
   assert.deepEqual(splitUrls(42), [{ text: "42" }]);
 });
+
+test("a scheme with no host is not a link", () => {
+  assert.deepEqual(splitUrls("see https://."), [{ text: "see https://." }]);
+});

@@ -1,4 +1,4 @@
-const URL_PATTERN = /https?:\/\/[^\s<>"']+/g;
+const URL_PATTERN = /https?:\/\/[^\s<>"'.,;:!?)\]}][^\s<>"']*/g;
 const TRAILING = /[.,;:!?)\]}]+$/;
 
 // Splits a field value into text and link segments. A link segment has `url`; trailing punctuation stays text.
