@@ -22,8 +22,10 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 
 ## Picking and fetching
 
-- Nothing picked and two or more found: show the list. Exactly one found: show it.
-- One pick for the whole panel, kept in `localStorage` by key. If the pick is no longer found, the panel goes back to the list, or to the only one left.
+- The shown space is the one `spaces()` marks `active`. The panel is built again on a space switch and chooses again.
+- The shown Firstmate is chosen by `chooseHome` in `homes.js`, in this order: a Firstmate with a pane in the space (several: the space's pick if it is one of them, else the first); the space's pick; the last Firstmate viewed; the only one found. If none applies, show the list.
+- Picks are kept in `localStorage` by space id and Firstmate key. Picks for spaces that no longer exist are dropped when a pick is saved. The last viewed Firstmate is kept in its own key.
+- A pick in a space that has one Firstmate pane does not change what shows, because the pane decides. The back arrow still opens the list.
 - Only the picked Firstmate is fetched: on pick, then every 30 s. One run at a time.
 - On failure (transport error, timeout, non-zero exit, bad JSON), keep the last good data, mark it stale with its age, and show one error line.
 

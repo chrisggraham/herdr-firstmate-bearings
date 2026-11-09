@@ -22,7 +22,7 @@ A **Firstmate** button in the tab bar opens a sidebar panel. The panel lists ope
 
 - `mods/firstmate-bearings/homes.js`: candidates, dedupe and names. No Herdr calls.
 - `mods/firstmate-bearings/bearings.js`: parse, schema check and sections. No Herdr calls.
-- `mods/firstmate-bearings/main.js`: the view, the picker (kept in `localStorage`), timers and `exec`.
+- `mods/firstmate-bearings/main.js`: the view, the picker (picks kept per space in `localStorage`), timers and `exec`.
 - `mod.json`: `{"place": "none", "title": "Firstmate Bearings"}`.
 
 ## Install into the user's Herdr
@@ -47,4 +47,5 @@ A **Firstmate** button in the tab bar opens a sidebar panel. The panel lists ope
 - Picking one shows its bearings within 5 seconds without changing the tab.
 - Closing every tab of a Firstmate removes it from the list.
 - With the Firstmate's machine disconnected, the last data stays, marked stale, with an error line.
-- After a Herdr restart, the panel shows the same pick.
+- After a Herdr restart, each space shows the same Firstmate as before.
+- A space with a pane in a Firstmate home shows that Firstmate. A space without one shows the Firstmate last picked there, else the last viewed.

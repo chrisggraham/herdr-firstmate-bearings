@@ -44,7 +44,13 @@ Or install it by hand:
 2. Pick one. The panel shows its bearings and refreshes every 30 seconds.
 3. Click the back arrow at the top left to return to the list.
 
-A Firstmate is found when one of its panes is open in its home folder. The pick is kept across restarts.
+A Firstmate is found when one of its panes is open in its home folder. The panel shows one Firstmate per space:
+
+1. A space with a pane in a Firstmate home shows that Firstmate. With panes in several homes, it shows the one picked in that space, else the first.
+2. A space with no such pane shows the Firstmate last picked in that space.
+3. A space with no pane and no pick shows the Firstmate last viewed.
+
+Each pick is kept for its space across restarts.
 
 A card opens when you click its title. Card details are fetched once per task with `fm-tasks-axi.sh show <id> --full`. If a refresh fails, the last data stays with its age and one error line. While a Firstmate is in away mode, the panel says so and keeps the last data.
 

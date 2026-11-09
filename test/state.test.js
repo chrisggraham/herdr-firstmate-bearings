@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "../mods/firstmate-bearings/state.js";
+import { allClosed, loadPicks, loadSet, savePick, saveSet, toggleAll, toggleId } from "../mods/firstmate-bearings/state.js";
 
 const fakeStorage = (values = {}) => ({
   values,
@@ -46,4 +46,24 @@ test("with every section closed, the same call opens all sections", () => {
   toggleAll(["a", "b"], collapsed, new Set());
   assert.equal(collapsed.size, 0);
   assert.equal(allClosed(["a", "b"], collapsed), false);
+});
+
+const memory = (initial) => {
+  const data = new Map(initial ? [["picks", initial]] : []);
+  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+};
+
+test("loadPicks reads a saved object and ignores anything else", () => {
+  assert.deepEqual(loadPicks(memory('{"s1":"a"}'), "picks"), { s1: "a" });
+  assert.deepEqual(loadPicks(memory(), "picks"), {});
+  assert.deepEqual(loadPicks(memory("[1]"), "picks"), {});
+  assert.deepEqual(loadPicks(memory("not json"), "picks"), {});
+});
+
+test("savePick keeps one pick per space and drops the picks of spaces that are gone", () => {
+  const storage = memory();
+  const picks = savePick(storage, "picks", { s1: "a", gone: "b" }, "s2", "c", ["s1", "s2"]);
+  assert.deepEqual(picks, { s1: "a", s2: "c" });
+  assert.deepEqual(loadPicks(storage, "picks"), picks);
+  assert.deepEqual(savePick(storage, "picks", picks, "s1", "b", ["s1", "s2"]), { s1: "b", s2: "c" });
 });

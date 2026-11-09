@@ -3,7 +3,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
 import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile, shared, setShared } from "herdr";
-import { awayPath, findCandidates, inboxPath, listHomes, loginShellArgs, needsCheck, scriptPath, showPath } from "./homes.js";
+import { awayPath, chooseHome, findCandidates, inboxPath, listHomes, loginShellArgs, needsCheck, scriptPath, showPath, spaceHomeKeys } from "./homes.js";
 import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings, repoOf } from "./bearings.js";
 import { dropGoneRecords, keysToFetch, retryFailedRecords } from "./records.js";
 import { parseTaskRecord } from "./toon.js";
@@ -15,14 +15,15 @@ import { readConfig } from "./config.js";
 import { DEMO_HOME, demoBearings } from "./demo.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { withPanel } from "./panels.js";
-import { allClosed, loadSet, saveSet, toggleAll, toggleId } from "./state.js";
+import { allClosed, loadPicks, loadSet, savePick, saveSet, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
 const SENT_FLASH_MS = 3000;
 const REPO_URL = "https://github.com/chrisggraham/herdr-firstmate-bearings";
 const PANEL_ID = "firstmate-bearings";
-const PICK_STORE = "picked";
+const PICK_STORE = "spacePicks";
+const LAST_STORE = "lastViewed";
 const COLLAPSED_STORE = "collapsed";
 const EXPANDED_STORE = "expanded";
 const SHOW_PARALLEL = 3;
@@ -36,6 +37,8 @@ const ago = (ms) => {
 
 // A remote machine answers only once its layout is ready; asking sooner fails.
 const machineReady = (machine) => machine === null || machines().some((m) => m.name === machine && m.layout === "ready");
+
+const shownSpace = () => spaces().find((space) => space.active);
 
 const firstLine = (text) => String(text).trim().split("\n")[0];
 
@@ -52,7 +55,8 @@ export default class FirstmateBearings extends View {
     this.awayHomes = new Set();
     this.homes = [];
     this.config = readConfig(null);
-    this.picked = localStorage.getItem(PICK_STORE);
+    this.picks = loadPicks(localStorage, PICK_STORE);
+    this.last = localStorage.getItem(LAST_STORE);
     this.listOpen = false;
     // Kept in storage: the panel is built again when the person switches spaces and comes back.
     this.collapsed = loadSet(localStorage, COLLAPSED_STORE);
@@ -141,7 +145,15 @@ export default class FirstmateBearings extends View {
   // The Firstmate whose bearings show, or null when the list shows.
   currentHome(homes) {
     if (this.listOpen) return null;
-    return homes.find((home) => home.key === this.picked) ?? (homes.length === 1 ? homes[0] : null);
+    const space = shownSpace();
+    return chooseHome(homes, spaceHomeKeys(space, panes()), this.picks[space?.id], this.last);
+  }
+
+  // The last Firstmate shown is the fallback for a space that has no pane and no pick yet.
+  remember(home) {
+    if (!home || home.demo || home.key === this.last) return;
+    this.last = home.key;
+    localStorage.setItem(LAST_STORE, home.key);
   }
 
   // Starts a fresh fetch when the shown Firstmate changes.
@@ -162,9 +174,9 @@ export default class FirstmateBearings extends View {
   }
 
   pick(home, cx) {
-    this.picked = home.key;
+    const space = shownSpace();
+    if (space) this.picks = savePick(localStorage, PICK_STORE, this.picks, space.id, home.key, spaces().map((s) => s.id));
     this.listOpen = false;
-    localStorage.setItem(PICK_STORE, home.key);
     cx.notify();
   }
 
@@ -429,6 +441,7 @@ export default class FirstmateBearings extends View {
     if (changed) this.checkAway(cx);
     const home = this.currentHome(homes);
     this.follow(home, cx);
+    this.remember(home);
 
     const body = home ? this.bearingsView(home, t) : this.listView(homes, t);
     return v_flex().id("firstmate-bearings").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background)
