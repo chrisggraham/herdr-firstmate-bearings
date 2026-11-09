@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findCandidates, homeKey, homeName, listHomes, awayPath, needsCheck, scriptPath, loginShellArgs } from "../mods/firstmate-bearings/homes.js";
+import { chooseHome, spaceHomeKeys, findCandidates, homeKey, homeName, listHomes, awayPath, needsCheck, scriptPath, loginShellArgs } from "../mods/firstmate-bearings/homes.js";
 
 // Two spaces on this computer (one named) and one unnamed space on machine "build-box".
 const spaces = [
@@ -66,4 +66,37 @@ test("the away marker is the .afk file in the state folder", () => {
 test("the login shell gets the script and each argument as separate arguments, never joined into a command", () => {
   const args = loginShellArgs("/home/x/bin/fm-tasks-axi.sh", ["show", "t; rm -rf /", "--full"]);
   assert.deepEqual(args, ["-lc", 'exec "$0" "$@"', "/home/x/bin/fm-tasks-axi.sh", "show", "t; rm -rf /", "--full"]);
+});
+
+// Three Firstmates; a, b and c are their keys.
+const homesAbc = ["a", "b", "c"].map((key) => ({ key }));
+const chosenKey = (...args) => chooseHome(...args)?.key ?? null;
+
+test("chooseHome follows the order: space panes, the space's pick, the last viewed, the only one", () => {
+  const cases = [
+    { name: "one Firstmate pane in the space wins over a pick and the last viewed", spaceKeys: ["b"], pick: "c", last: "a", want: "b" },
+    { name: "two panes: the space's pick when it is one of them", spaceKeys: ["a", "b"], pick: "b", last: "c", want: "b" },
+    { name: "two panes: the first when the pick is not one of them", spaceKeys: ["a", "b"], pick: "c", last: "c", want: "a" },
+    { name: "two panes: the first when there is no pick", spaceKeys: ["b", "c"], pick: null, last: "a", want: "b" },
+    { name: "a pane whose Firstmate is not found is skipped", spaceKeys: ["gone"], pick: "c", last: "a", want: "c" },
+    { name: "no pane: the space's pick", spaceKeys: [], pick: "c", last: "a", want: "c" },
+    { name: "no pane and no pick: the last viewed", spaceKeys: [], pick: null, last: "b", want: "b" },
+    { name: "no pane and a pick no longer found: the last viewed", spaceKeys: [], pick: "gone", last: "b", want: "b" },
+    { name: "nothing remembered and several found: none", spaceKeys: [], pick: null, last: null, want: null },
+  ];
+  for (const { name, spaceKeys, pick, last, want } of cases) {
+    assert.equal(chosenKey(homesAbc, new Set(spaceKeys), pick, last), want, name);
+  }
+});
+
+test("chooseHome shows the only Firstmate when nothing else decides", () => {
+  assert.equal(chosenKey([{ key: "a" }], new Set(), null, null), "a");
+  assert.equal(chosenKey([], new Set(), "a", "a"), null);
+});
+
+test("spaceHomeKeys lists the folders of the panes in one space, on its machine", () => {
+  const panes = [pane("t1", "/work/crew"), pane("t2", "/work/other"), pane("t3", "/work/crew"), pane("t1", null), pane("t2", "/work/x", { mod: "files" })];
+  assert.deepEqual([...spaceHomeKeys(spaces[0], panes)], [homeKey(null, "/work/crew"), homeKey(null, "/work/other")]);
+  assert.deepEqual([...spaceHomeKeys(spaces[2], [pane("t4", "/work/crew")])], [homeKey("build-box", "/work/crew")]);
+  assert.deepEqual([...spaceHomeKeys(undefined, panes)], []);
 });

@@ -36,3 +36,25 @@ export function toggleAll(sectionIds, collapsed, expanded) {
   sectionIds.forEach((id) => collapsed.add(id));
   expanded.clear();
 }
+
+// The Firstmate picked in each space: space id -> home key.
+export function loadPicks(storage, key) {
+  try {
+    const picks = JSON.parse(storage.getItem(key));
+    return picks && typeof picks === "object" && !Array.isArray(picks) ? picks : {};
+  } catch {
+    return {};
+  }
+}
+
+// Remembers a pick for one space and drops the picks of spaces that no longer exist. Returns the new picks.
+export function savePick(storage, key, picks, spaceId, homeKey, liveSpaceIds) {
+  const next = Object.fromEntries(Object.entries(picks).filter(([id]) => liveSpaceIds.includes(id)));
+  next[spaceId] = homeKey;
+  try {
+    storage.setItem(key, JSON.stringify(next));
+  } catch {
+    // Storage can be full or blocked; the pick then holds for this view only.
+  }
+  return next;
+}
