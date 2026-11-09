@@ -1,6 +1,6 @@
 # Firstmate Bearings
 
-Firstmate Bearings is a sidebar panel for the Herdr desktop app. It shows the bearings of a [Firstmate](https://github.com/kunchenguid/firstmate) that is open in any tab.
+A sidebar panel for [Firstmate](https://github.com/kunchenguid/firstmate), the open-source supervisor that runs a team of coding agents. It shows your Firstmate's work in progress, open PRs and the decisions that wait on you.
 
 ![Firstmate Bearings](preview.png)
 
