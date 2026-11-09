@@ -58,3 +58,17 @@ export function savePick(storage, key, picks, spaceId, homeKey, liveSpaceIds) {
   }
   return next;
 }
+
+// Remembers the last parsed bearings of one Firstmate and when they were fetched (home key -> { data, at }),
+// so a new view of the panel shows them at once. Drops the Firstmates that are no longer found. Returns the new
+// snapshots; loadPicks reads them back, because it reads any saved object.
+export function saveSnapshot(storage, key, snapshots, homeKey, data, at, liveHomeKeys) {
+  const next = Object.fromEntries(Object.entries(snapshots).filter(([id]) => liveHomeKeys.includes(id)));
+  next[homeKey] = { data, at };
+  try {
+    storage.setItem(key, JSON.stringify(next));
+  } catch {
+    // Storage can be full or blocked; the snapshots then hold for this view only.
+  }
+  return next;
+}

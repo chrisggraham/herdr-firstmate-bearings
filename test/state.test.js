@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allClosed, loadPicks, loadSet, savePick, saveSet, toggleAll, toggleId } from "../mods/firstmate-bearings/state.js";
+import { allClosed, loadPicks, loadSet, savePick, saveSet, saveSnapshot, toggleAll, toggleId } from "../mods/firstmate-bearings/state.js";
 
 const fakeStorage = (values = {}) => ({
   values,
@@ -66,4 +66,23 @@ test("savePick keeps one pick per space and drops the picks of spaces that are g
   assert.deepEqual(picks, { s1: "a", s2: "c" });
   assert.deepEqual(loadPicks(storage, "picks"), picks);
   assert.deepEqual(savePick(storage, "picks", picks, "s1", "b", ["s1", "s2"]), { s1: "b", s2: "c" });
+});
+
+const snapshotStorage = (initial) => {
+  const data = new Map(initial ? [["snapshots", initial]] : []);
+  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+};
+
+test("saveSnapshot keeps one snapshot per Firstmate and drops the Firstmates that are gone", () => {
+  const storage = snapshotStorage();
+  const before = { a: { data: { n: 1 }, at: 1 }, gone: { data: { n: 2 }, at: 2 } };
+  const after = saveSnapshot(storage, "snapshots", before, "b", { n: 3 }, 3, ["a", "b"]);
+  assert.deepEqual(after, { a: { data: { n: 1 }, at: 1 }, b: { data: { n: 3 }, at: 3 } });
+  assert.deepEqual(loadPicks(storage, "snapshots"), after);
+  assert.deepEqual(saveSnapshot(storage, "snapshots", after, "a", { n: 4 }, 4, ["a", "b"]).a, { data: { n: 4 }, at: 4 });
+});
+
+test("a storage that refuses a snapshot write still returns the snapshots for this view", () => {
+  const full = { setItem() { throw new Error("full"); } };
+  assert.deepEqual(saveSnapshot(full, "snapshots", {}, "a", { n: 1 }, 1, ["a"]), { a: { data: { n: 1 }, at: 1 } });
 });

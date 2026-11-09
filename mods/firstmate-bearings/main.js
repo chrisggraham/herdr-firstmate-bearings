@@ -15,7 +15,7 @@ import { readConfig } from "./config.js";
 import { DEMO_HOME, demoBearings } from "./demo.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
 import { withPanel } from "./panels.js";
-import { allClosed, loadPicks, loadSet, savePick, saveSet, toggleAll, toggleId } from "./state.js";
+import { allClosed, loadPicks, loadSet, savePick, saveSet, saveSnapshot, toggleAll, toggleId } from "./state.js";
 
 const FETCH_EVERY_MS = 30000;
 const CLOCK_EVERY_MS = 5000;
@@ -26,6 +26,7 @@ const PICK_STORE = "spacePicks";
 const LAST_STORE = "lastViewed";
 const COLLAPSED_STORE = "collapsed";
 const EXPANDED_STORE = "expanded";
+const SNAPSHOT_STORE = "snapshots";
 const SHOW_PARALLEL = 3;
 const PILL_ALPHA = "26";
 const CHIP_HOVER_ALPHA = "40";
@@ -61,6 +62,7 @@ export default class FirstmateBearings extends View {
     // Kept in storage: the panel is built again when the person switches spaces and comes back.
     this.collapsed = loadSet(localStorage, COLLAPSED_STORE);
     this.expanded = loadSet(localStorage, EXPANDED_STORE);
+    this.snapshots = loadPicks(localStorage, SNAPSHOT_STORE);
     // Full task records by Firstmate: home key -> task id -> { signature, record }.
     this.records = new Map();
     this.logging = Promise.resolve();
@@ -156,6 +158,14 @@ export default class FirstmateBearings extends View {
     localStorage.setItem(LAST_STORE, home.key);
   }
 
+  // Shows the last bearings kept for the Firstmate at once, then starts a fresh fetch. The fetch
+  // replaces them when it ends; a failed fetch leaves them on screen with the error line.
+  seedFrom(home) {
+    const snapshot = this.snapshots[home?.key];
+    this.data = snapshot?.data ?? null;
+    this.updated = snapshot?.at ?? null;
+  }
+
   // Starts a fresh fetch when the shown Firstmate changes.
   follow(home, cx) {
     const key = home?.key ?? null;
@@ -166,10 +176,9 @@ export default class FirstmateBearings extends View {
     }
     this.shown = key;
     this.home = home;
-    this.data = null;
     this.error = null;
     this.away = false;
-    this.updated = null;
+    this.seedFrom(home);
     if (home) this.fetch(cx);
   }
 
@@ -196,10 +205,12 @@ export default class FirstmateBearings extends View {
         }
         if (result.code !== 0) throw new Error(firstLine(result.stderr) || `exit code ${result.code}`);
         const bearings = readBearings(result.stdout, { hideEmpty: this.config.hideEmptySections });
+        const at = Date.now();
         if (this.home?.key === home.key) {
-          Object.assign(this, { data: bearings, error: null, away: false, updated: Date.now() });
+          Object.assign(this, { data: bearings, error: null, away: false, updated: at });
           this.awayHomes.delete(home.key);
         }
+        this.snapshots = saveSnapshot(localStorage, SNAPSHOT_STORE, this.snapshots, home.key, bearings, at, this.homes.map((h) => h.key));
         this.counts.set(home.key, bearings.counts);
         this.fetchRecords(home, bearings.records, cx);
       } catch (e) {
