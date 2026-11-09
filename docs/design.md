@@ -27,6 +27,7 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 - Picks are kept in `localStorage` by space id and Firstmate key. Picks for spaces that no longer exist are dropped when a pick is saved. The last viewed Firstmate is kept in its own key.
 - A pick in a space that has one Firstmate pane does not change what shows, because the pane decides. The back arrow still opens the list.
 - Only the picked Firstmate is fetched: on pick, then every 30 s. One run at a time.
+- The last parsed bearings of each Firstmate and the time they were fetched are kept in `localStorage` (one entry per Firstmate; entries for Firstmates no longer found are dropped on save). When the panel is built again or the shown Firstmate changes, those bearings show at once with "updated" counted from their fetch time, and a fetch runs while they stay on screen. Loading shows only when a Firstmate has no kept bearings. Full task records are not kept; they are fetched again.
 - On failure (transport error, timeout, non-zero exit, bad JSON), keep the last good data, mark it stale with its age, and show one error line.
 
 ## Display
