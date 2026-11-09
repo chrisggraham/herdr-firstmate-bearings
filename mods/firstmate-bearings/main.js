@@ -508,7 +508,7 @@ export default class FirstmateBearings extends View {
     if (!this.away) return [];
     const stale = this.updated ? `Showing data from ${ago(this.updated)}.` : "";
     return [v_flex().flex_none().mx(10).mt(8).px(10).py(8).gap(3).rounded(8).bg(t.raised)
-      .child(div().text_size(12.5).font_medium().child(`${home.name} is in away mode. Bearings shows again after it returns.`))
+      .child(div().text_size(12.5).font_medium().child(`Firstmate (${home.name}) is in away mode. Bearings shows again after it returns.`))
       .when(Boolean(stale), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(stale)))];
   }
 
