@@ -1,7 +1,7 @@
 // A sidebar panel that shows the bearings of one open Firstmate. It never switches tabs.
 // openAskDialog opens a dialog (this same mod as an overlay) that sends one note to that Firstmate.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
+import { v_flex, h_flex, TextareaState, Textarea, InputState, Input, Select, Popup } from "gpui-base";
 import { spaces, panes, machines, exec, theme, props, openOverlay, closeOverlay, notify, appHome, readTextFile, writeTextFile, shared, setShared } from "herdr";
 import { awayPath, chooseHome, findCandidates, inboxPath, listHomes, loginShellArgs, needsCheck, scriptPath, showPath, spaceHomeKeys } from "./homes.js";
 import { REVEAL_FLAGS, cardOf, isAwayRefusal, readBearings, repoOf } from "./bearings.js";
@@ -14,6 +14,7 @@ import { labelOf, typedFields } from "./fields.js";
 import { readConfig } from "./config.js";
 import { DEMO_HOME, demoBearings } from "./demo.js";
 import { LOG_FILE, formatLine, appendLine } from "./log.js";
+import { ALL_REPOS, filterSections, filterSummary, isFiltering, repoOptions, validRepo } from "./filters.js";
 import { withPanel } from "./panels.js";
 import { allClosed, loadPicks, loadSet, savePick, saveSet, saveSnapshot, toggleAll, toggleId } from "./state.js";
 
@@ -28,6 +29,10 @@ const COLLAPSED_STORE = "collapsed";
 const EXPANDED_STORE = "expanded";
 const SNAPSHOT_STORE = "snapshots";
 const SHOW_PARALLEL = 3;
+const FILTER_HEIGHT = 28;
+const REPO_LIST_MIN_WIDTH = 140;
+const REPO_LIST_MAX_HEIGHT = 280;
+const DEFAULT_PANEL_WIDTH = 368;
 const PILL_ALPHA = "26";
 const CHIP_HOVER_ALPHA = "40";
 
@@ -70,9 +75,25 @@ export default class FirstmateBearings extends View {
     this.sentKeys = new Set();
     this.shown = null;
     this.running = null;
+    this.initFilters(cx);
     cx.timer.every(FETCH_EVERY_MS, (cx) => { this.fetch(cx); this.checkAway(cx); });
     this.reloadConfig(cx);
     cx.timer.every(CLOCK_EVERY_MS, (cx) => { this.reloadConfig(cx); cx.notify(); });
+  }
+
+  // The filters live in the panel only: a new panel starts with none. The state is made here, never in render.
+  initFilters(cx) {
+    this.search = "";
+    this.repo = ALL_REPOS;
+    this.repoOpen = false;
+    this.searchFocused = false;
+    this.searchInput = InputState.new({ placeholder: "Search" });
+    this.searchInput.on("change", (_e, cx) => { this.search = this.searchInput.value(); cx.notify(); });
+    this.searchInput.on("focus", () => { this.searchFocused = true; });
+    this.searchInput.on("blur", () => { this.searchFocused = false; });
+    this.panelHandle = cx.focus_handle();
+    this.repoTriggerFocus = cx.focus_handle();
+    this.repoListFocus = cx.focus_handle();
   }
 
   async loadConfig() {
@@ -287,6 +308,40 @@ export default class FirstmateBearings extends View {
     cx.notify();
   }
 
+  clearSearch(cx) {
+    this.searchInput.set_value("");
+    this.search = "";
+    cx.notify();
+  }
+
+  clearFilters(cx) {
+    this.repo = ALL_REPOS;
+    this.clearSearch(cx);
+  }
+
+  chooseRepo(repo, cx) {
+    this.repo = repo;
+    this.repoOpen = false;
+    cx.notify();
+  }
+
+  // "/" focuses the search box unless it already has the keyboard; Esc in it clears the text.
+  panelKey(e, cx) {
+    if (e.key === "/" && !this.searchFocused && !e.modifiers?.control && !e.modifiers?.platform && !e.modifiers?.alt) {
+      this.searchInput.focus();
+      cx.stop_propagation();
+    } else if (e.key === "escape" && this.searchFocused && this.search !== "") {
+      this.clearSearch(cx);
+      cx.stop_propagation();
+    }
+  }
+
+  // The text of a card as it shows: the full title and the repo, from the task record when there is one.
+  viewOf(row) {
+    const record = this.records.get(this.home?.key)?.get(row.itemId)?.record;
+    return { title: cardOf(row, record).title, repo: repoOf(row, record) };
+  }
+
   // A click on the refresh button fetches at once; a fetch that is running ignores it.
   refresh(cx) {
     const cache = this.records.get(this.home?.key);
@@ -498,9 +553,68 @@ export default class FirstmateBearings extends View {
       .child(back).child(name).child(machine)
       .child(this.pill(updated, t.muted, t.hover))
       .child(this.collapseButton(t)).child(this.refreshButton(t));
-    return v_flex().flex_1().min_h(0).child(header)
+    const all = this.data?.sections ?? [];
+    const view = (row) => this.viewOf(row);
+    const options = repoOptions(all, view);
+    // A repo that no card has any more (it left the data) stops filtering.
+    this.repo = validRepo(this.repo, options);
+    const filter = { search: this.search, repo: this.repo };
+    const filtering = isFiltering(filter);
+    const sections = filterSections(all, filter, view);
+    return v_flex().id("firstmate-panel").flex_1().min_h(0).track_focus(this.panelHandle)
+      .on_key_down((e, cx) => this.panelKey(e, cx))
+      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
+      .child(header).child(this.filterRow(options, t))
+      .children(filtering ? [this.filterSummaryLine(filterSummary(sections, all), t)] : [])
       .child(v_flex().id("firstmate-sections").flex_1().min_h(0).overflow_y_scrollbar().pb(6)
-        .children(this.awayLines(home, t)).children(this.errorLines(t)).children(this.noteLines(t)).children(this.sectionViews(t)));
+        .children(this.awayLines(home, t)).children(this.errorLines(t)).children(this.noteLines(t))
+        .children(sections.map((section, i) => this.sectionView(section, t, i === 0, filtering))));
+  }
+
+  // The search box and the repo select, each half of the panel width.
+  filterRow(options, t) {
+    const search = h_flex().id("filter-search-box").w_1_2().h(FILTER_HEIGHT).min_w(0).px(8).gap(6).items_center().rounded(6).border_1()
+      .border_color(this.searchFocused ? t.accent : t.border).bg(t.raised)
+      .child(Input.new(this.searchInput).flex_1().min_w(0).text_size(12).text_color(t.foreground))
+      .when(this.search !== "", (el) => el.child(h_flex().id("filter-search-clear").size(16).flex_none().items_center().justify_center().rounded(4)
+        .text_size(13).text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover)).tooltip("Clear search")
+        .on_click((_e, cx) => this.clearSearch(cx)).child("×")));
+    return h_flex().id("filter-row").flex_none().px(10).py(6).gap(6).items_center().border_b(1).border_color(t.border)
+      .child(search).child(this.repoSelect(options, t));
+  }
+
+  // "Showing 3 of 12 · Clear filters", only while a filter is on.
+  filterSummaryLine(text, t) {
+    return h_flex().id("filter-summary").flex_none().px(12).py(4).gap(4).items_center().text_size(11.5).text_color(t.muted)
+      .child(div().child(`${text} ·`))
+      .child(div().id("filter-clear").text_color(t.accent).cursor_pointer().hover((s) => s.opacity(0.8))
+        .on_click((_e, cx) => this.clearFilters(cx)).child("Clear filters"));
+  }
+
+  // The list of the repo select: "All repos" and each repo with its card count. A name wider than the panel is cut.
+  repoList(options, t) {
+    const entries = [{ repo: ALL_REPOS, text: "All repos", count: null }, ...options.map((o) => ({ repo: o.repo, text: o.repo, count: o.count }))];
+    return v_flex().id("filter-repo-list").track_focus(this.repoListFocus).mt(4).p(4).gap(2).min_w(REPO_LIST_MIN_WIDTH).max_w(Math.max(REPO_LIST_MIN_WIDTH, (this.width ?? DEFAULT_PANEL_WIDTH) - 20))
+      .max_h(REPO_LIST_MAX_HEIGHT).overflow_y_scrollbar().rounded(8).border_1().border_color(t.border).bg(t.popover).shadow_md()
+      .children(entries.map((entry, i) => h_flex().id(`filter-repo-${i}`).px(8).py(5).gap(8).items_center().rounded(5).cursor_pointer()
+        .hover((s) => s.bg(t.hover)).bg(entry.repo === this.repo ? t.hover : t.popover)
+        .on_click((_e, cx) => this.chooseRepo(entry.repo, cx))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).child(entry.text))
+        .when(entry.count !== null, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(String(entry.count))))));
+  }
+
+  // The repo select: a trigger with the chosen repo cut to the box, and a list of "All repos" and each repo with its card count.
+  repoSelect(options, t) {
+    const label = this.repo === ALL_REPOS ? "All repos" : this.repo;
+    const trigger = h_flex().id("filter-repo-trigger").w_full().h(FILTER_HEIGHT).px(8).gap(6).items_center().rounded(6).border_1()
+      .border_color(this.repoOpen ? t.accent : t.border).bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover)).track_focus(this.repoTriggerFocus)
+      .tooltip(label)
+      .child(div().flex_1().min_w(0).truncate().text_size(12).child(label))
+      .child(svg("mods/workspace-chrome/chevron-down.svg").size(11).flex_none().text_color(t.dim));
+    return div().w_1_2().min_w(0).child(Select.new("filter-repo").accessibility_label("Repo").open(this.repoOpen)
+      .track_focus(this.repoTriggerFocus).content_focus_handle(this.repoListFocus)
+      .on_open_change((open, cx) => { this.repoOpen = open; cx.notify(); })
+      .child(Popup.new("filter-repo-popup", trigger).anchor("bottom_left").when(this.repoOpen, (el) => el.content(this.repoList(options, t)))));
   }
 
   // A calm card while the Firstmate is in away mode. Data from before stays under it.
@@ -553,13 +667,9 @@ export default class FirstmateBearings extends View {
     return texts.map((text) => div().px(14).py(6).text_size(12).text_color(t.muted).child(text));
   }
 
-  sectionViews(t) {
-    return (this.data?.sections ?? []).map((section, i) => this.sectionView(section, t, i === 0));
-  }
-
   // A section header is a plain line, not a card: a divider above it, a bold title in the section's
   // accent color and a count pill in the same color.
-  sectionView(section, t, first) {
+  sectionView(section, t, first, filtering) {
     const open = !this.collapsed.has(section.id);
     const accent = t[section.tone] ?? t.muted;
     const header = h_flex().id(`section-${section.id}`).h(36).flex_none().mx(12).mt(14).pt(10).gap(7).items_center()
@@ -567,8 +677,8 @@ export default class FirstmateBearings extends View {
       .cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.toggle(section.id, cx))
       .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(13).flex_none().text_color(accent))
       .child(div().flex_1().min_w(0).truncate().text_size(14).font_bold().text_color(accent).child(section.title))
-      .child(this.pill(String(section.count), accent, accent + PILL_ALPHA));
-    const rows = open ? section.rows.map((row, i) => this.rowView(section, row, i, t)) : [];
+      .child(this.pill(filtering ? `${section.rows.length} of ${section.total}` : String(section.count), accent, accent + PILL_ALPHA));
+    const rows = open ? section.rows.map((row) => this.rowView(section, row, row.index, t)) : [];
     return v_flex().flex_none().child(header).children(rows);
   }
 

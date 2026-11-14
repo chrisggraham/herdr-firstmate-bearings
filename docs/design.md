@@ -32,7 +32,14 @@ A Herdr app sidebar panel. It lists the Firstmates open anywhere in Herdr. Pick 
 
 ## Display
 
-Switcher, "updated 12s ago", then collapsible sections with counts (collapsed and opened state kept in `localStorage`, so a switch of space keeps it). A section with no items is hidden unless `hideEmptySections` is `false` in `config.json`.
+Switcher, "updated 12s ago", then the filter row, then collapsible sections with counts (collapsed and opened state kept in `localStorage`, so a switch of space keeps it). A section with no items is hidden unless `hideEmptySections` is `false` in `config.json`.
+
+The filter row sits under the header and is always visible. The search box and the repo select each take half the panel width and follow it when it is resized. Logic is in `filters.js`.
+
+- Search matches the title, repo, detail line, task id and PR number, as a case-insensitive substring. `/` focuses it when the panel has the keyboard; Esc clears it; its × clears the text.
+- The repo select lists "All repos", then every repo on any card in any section, by name, each with its card count. A long name is cut with an ellipsis in the trigger and in the list. A selected repo that no card has any more falls back to "All repos".
+- The filters combine (AND). While one is on, a line under the filter row reads "Showing N of M · Clear filters", each section count reads "N of M", and a section with no match is hidden. Collapse state and card actions work on the cards that show.
+- The filters are kept in the panel only: a new panel starts with none. The repo list has no arrow-key navigation (the kit's `Select` has none); it works with the pointer, and Esc closes it.
 
 Each item is a card: a bar in the section color (Waiting on you blocked, In flight and PRs blue, Secondmates dim, Queued muted, Landed green), a title (two lines at most), a status pill, a muted repo label and detail line. Colors are theme tokens only. A left click opens the card in place to the full title and every fact the snapshot has for it; a second click closes it. Right-click is left free.
 
