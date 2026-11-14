@@ -14,6 +14,7 @@ The panel sends notes to a Firstmate (Discuss) and runs actions (Done, Defer, Dr
 - Opened card: all badges, the description, long texts and link chips.
 - Discuss: a dialog that sends a note about a card to the Firstmate.
 - Actions on a card, only when valid: Done, Defer and Drop (Waiting on you), Stop (In flight), Start now (Queued). Drop and Stop ask first.
+- Filters under the header: a text search (`/` focuses it, Esc clears it) and a repo select, each half the panel width, with a Clear filters line.
 - Refresh button, and Collapse all or Expand all.
 - Card details come from the full task record.
 - Errors go to a log file.
