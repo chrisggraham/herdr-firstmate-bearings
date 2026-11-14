@@ -92,8 +92,8 @@ export default class FirstmateBearings extends View {
     this.searchInput.on("focus", () => { this.searchFocused = true; });
     this.searchInput.on("blur", () => { this.searchFocused = false; });
     this.panelHandle = cx.focus_handle();
-    this.repoTrigger = cx.focus_handle();
-    this.repoList = cx.focus_handle();
+    this.repoTriggerFocus = cx.focus_handle();
+    this.repoListFocus = cx.focus_handle();
   }
 
   async loadConfig() {
@@ -594,7 +594,7 @@ export default class FirstmateBearings extends View {
   // The list of the repo select: "All repos" and each repo with its card count. A name wider than the panel is cut.
   repoList(options, t) {
     const entries = [{ repo: ALL_REPOS, text: "All repos", count: null }, ...options.map((o) => ({ repo: o.repo, text: o.repo, count: o.count }))];
-    return v_flex().id("filter-repo-list").track_focus(this.repoList).mt(4).p(4).gap(2).min_w(REPO_LIST_MIN_WIDTH).max_w(Math.max(REPO_LIST_MIN_WIDTH, (this.width ?? DEFAULT_PANEL_WIDTH) - 20))
+    return v_flex().id("filter-repo-list").track_focus(this.repoListFocus).mt(4).p(4).gap(2).min_w(REPO_LIST_MIN_WIDTH).max_w(Math.max(REPO_LIST_MIN_WIDTH, (this.width ?? DEFAULT_PANEL_WIDTH) - 20))
       .max_h(REPO_LIST_MAX_HEIGHT).overflow_y_scrollbar().rounded(8).border_1().border_color(t.border).bg(t.popover).shadow_md()
       .children(entries.map((entry, i) => h_flex().id(`filter-repo-${i}`).px(8).py(5).gap(8).items_center().rounded(5).cursor_pointer()
         .hover((s) => s.bg(t.hover)).bg(entry.repo === this.repo ? t.hover : t.popover)
@@ -607,12 +607,12 @@ export default class FirstmateBearings extends View {
   repoSelect(options, t) {
     const label = this.repo === ALL_REPOS ? "All repos" : this.repo;
     const trigger = h_flex().id("filter-repo-trigger").w_full().h(FILTER_HEIGHT).px(8).gap(6).items_center().rounded(6).border_1()
-      .border_color(this.repoOpen ? t.accent : t.border).bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover)).track_focus(this.repoTrigger)
+      .border_color(this.repoOpen ? t.accent : t.border).bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover)).track_focus(this.repoTriggerFocus)
       .tooltip(label)
       .child(div().flex_1().min_w(0).truncate().text_size(12).child(label))
       .child(svg("mods/workspace-chrome/chevron-down.svg").size(11).flex_none().text_color(t.dim));
     return div().w_1_2().min_w(0).child(Select.new("filter-repo").accessibility_label("Repo").open(this.repoOpen)
-      .track_focus(this.repoTrigger).content_focus_handle(this.repoList)
+      .track_focus(this.repoTriggerFocus).content_focus_handle(this.repoListFocus)
       .on_open_change((open, cx) => { this.repoOpen = open; cx.notify(); })
       .child(Popup.new("filter-repo-popup", trigger).anchor("bottom_left").when(this.repoOpen, (el) => el.content(this.repoList(options, t)))));
   }
