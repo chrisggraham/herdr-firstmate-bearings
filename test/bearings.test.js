@@ -93,12 +93,12 @@ test("a PR URL with no pull number still gets a plain chip", () => {
 
 test("a hold card shows its title alone, without 'Captain' or the reason, and a plain pill", () => {
   const decisions = [
-    { id: "a", verb: "captain-hold", owner: "(main)", summary: "Captain: Stripe setup for billing launch (priority): Captain does the Stripe setup by hand…", question: "Q" },
-    { id: "b", verb: "captain-hold", owner: "(main)", summary: "PHP2Shell: patch the sites (captain hand task): Captain…", question: "Q" },
-    { id: "c", verb: "captain-hold", owner: "(main)", summary: "PHP2Shell: patch fnContact and retire two PHP 5.6 sites", question: "Q" },
+    { id: "a", verb: "captain-hold", owner: "(main)", summary: "Captain: Payments setup for acme-shop launch (priority): Captain does the payments setup by hand…", question: "Q" },
+    { id: "b", verb: "captain-hold", owner: "(main)", summary: "acme-web: patch the sites (captain hand task): Captain…", question: "Q" },
+    { id: "c", verb: "captain-hold", owner: "(main)", summary: "acme-web: patch the contact form and retire two old sites", question: "Q" },
   ];
   const rows = readBearings(JSON.stringify({ schema: "fm-bearings.v1", decisions_open: decisions })).sections[0].rows;
-  assert.deepEqual(rows.map((r) => r.title), ["Stripe setup for billing launch (priority)", "PHP2Shell: patch the sites (captain hand task)", "PHP2Shell: patch fnContact and retire two PHP 5.6 sites"]);
+  assert.deepEqual(rows.map((r) => r.title), ["Payments setup for acme-shop launch (priority)", "acme-web: patch the sites (captain hand task)", "acme-web: patch the contact form and retire two old sites"]);
   assert.deepEqual(rows.map((r) => r.status.text), ["decision", "hand task", "decision"]);
   assert.ok(rows.every((r) => !r.detail.includes("captain-hold") && !r.detail.includes("(main)") && !r.facts.some(([, v]) => v.includes("(main)"))));
 });
